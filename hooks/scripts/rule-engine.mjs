@@ -116,7 +116,7 @@ function matchGlob(filePath, pattern) {
 
 // Load all active rules with enforcement entries
 function loadEnforcementRules(projectDir) {
-  const rulesDir = join(projectDir, ".orqa", "governance", "rules");
+  const rulesDir = join(projectDir, ".orqa", "process", "rules");
   if (!existsSync(rulesDir)) return [];
 
   const rules = [];

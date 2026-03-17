@@ -65,10 +65,10 @@ if [ -d "$ORQA_DIR" ]; then
   mkdir -p "$CLAUDE_DIR"
 
   # .claude/ symlinks — required by Claude Code's native discovery
-  setup_symlink "$CLAUDE_DIR/CLAUDE.md" "$ORQA_DIR/team/agents/orchestrator.md"
-  setup_symlink "$CLAUDE_DIR/rules"     "$ORQA_DIR/governance/rules"
-  setup_symlink "$CLAUDE_DIR/agents"    "$ORQA_DIR/team/agents"
-  setup_symlink "$CLAUDE_DIR/skills"    "$ORQA_DIR/team/skills"
+  setup_symlink "$CLAUDE_DIR/CLAUDE.md" "$ORQA_DIR/process/agents/orchestrator.md"
+  setup_symlink "$CLAUDE_DIR/rules"     "$ORQA_DIR/process/rules"
+  setup_symlink "$CLAUDE_DIR/agents"    "$ORQA_DIR/process/agents"
+  setup_symlink "$CLAUDE_DIR/skills"    "$ORQA_DIR/process/skills"
 fi
 
 # ─── Plugin Skill Installation ──────────────────────────────────────────────
@@ -76,11 +76,11 @@ fi
 # the artifact scanner and browsable in the app. Plugin skills have layer: plugin.
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-}"
 
-if [ -n "$PLUGIN_ROOT" ] && [ -d "$PLUGIN_ROOT/skills" ] && [ -d "$ORQA_DIR/team/skills" ]; then
+if [ -n "$PLUGIN_ROOT" ] && [ -d "$PLUGIN_ROOT/skills" ] && [ -d "$ORQA_DIR/process/skills" ]; then
   for skill_dir in "$PLUGIN_ROOT"/skills/*/; do
     [ -d "$skill_dir" ] || continue
     skill_name=$(basename "$skill_dir")
-    target_dir="$ORQA_DIR/team/skills/$skill_name"
+    target_dir="$ORQA_DIR/process/skills/$skill_name"
     setup_symlink "$target_dir" "$skill_dir"
   done
 fi
@@ -151,8 +151,8 @@ OUTPUT="${OUTPUT}- Universal roles: researcher, planner, implementer, reviewer, 
 OUTPUT="${OUTPUT}- Roles are specialised via skills at runtime\n\n"
 
 OUTPUT="${OUTPUT}SESSION START CHECKLIST:\n"
-OUTPUT="${OUTPUT}- Check .orqa/planning/tasks/ for current tasks\n"
-OUTPUT="${OUTPUT}- Check .orqa/planning/epics/ for active epics\n"
+OUTPUT="${OUTPUT}- Check .orqa/delivery/tasks/ for current tasks\n"
+OUTPUT="${OUTPUT}- Check .orqa/delivery/epics/ for active epics\n"
 
 if [ -n "$OUTPUT" ]; then
   echo -e "$OUTPUT"

@@ -125,8 +125,6 @@ export class PromptInjector {
 	private loadSkillContent(skillName: string): string | null {
 		const skillPaths = [
 			path.join(this.projectRoot, ".orqa", "process", "skills", skillName, "SKILL.md"),
-			// Also check team/skills for app-specific layout
-			path.join(this.projectRoot, ".orqa", "team", "skills", skillName, "SKILL.md"),
 		];
 
 		for (const skillPath of skillPaths) {

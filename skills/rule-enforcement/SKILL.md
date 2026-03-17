@@ -17,7 +17,7 @@ The OrqaStudio companion plugin brings the app's rule enforcement to Claude Code
 
 ## How It Works
 
-Rules in `.orqa/governance/rules/RULE-NNN.md` can have an `enforcement` array in their YAML frontmatter. Each entry defines a pattern that is evaluated by the plugin's PreToolUse hook before tool calls execute.
+Rules in `.orqa/process/rules/RULE-NNN.md` can have an `enforcement` array in their YAML frontmatter. Each entry defines a pattern that is evaluated by the plugin's PreToolUse hook before tool calls execute.
 
 ## Enforcement Entry Format
 
@@ -47,7 +47,7 @@ enforcement:
 
 ## Adding Enforcement to a Rule
 
-1. Open the rule file in `.orqa/governance/rules/`
+1. Open the rule file in `.orqa/process/rules/`
 2. Add an `enforcement` array to the YAML frontmatter
 3. Each entry needs: `event`, `action`, `message`
 4. Optional: `pattern` (regex), `paths` (glob filters), `skills` (for inject action)

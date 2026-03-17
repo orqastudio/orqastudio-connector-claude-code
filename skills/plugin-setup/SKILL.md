@@ -42,9 +42,9 @@ file .claude/CLAUDE.md .claude/rules .claude/agents .claude/skills 2>/dev/null
 | No `.claude/` directory | Fresh install | Bootstrap from scratch |
 | `.claude/CLAUDE.md` is a real file | Existing Claude Code project | Migrate to `.orqa/` |
 | `.claude/CLAUDE.md` is a symlink to `.orqa/` | Already set up for OrqaStudio | Just install plugin |
-| `.claude/rules/` contains real `.md` files | Existing rules | Migrate to `.orqa/governance/rules/` |
-| `.claude/agents/` contains real `.md` files | Existing agents | Migrate to `.orqa/team/agents/` |
-| `.claude/skills/` contains real dirs | Existing skills | Migrate to `.orqa/team/skills/` |
+| `.claude/rules/` contains real `.md` files | Existing rules | Migrate to `.orqa/process/rules/` |
+| `.claude/agents/` contains real `.md` files | Existing agents | Migrate to `.orqa/process/agents/` |
+| `.claude/skills/` contains real dirs | Existing skills | Migrate to `.orqa/process/skills/` |
 
 ### Check 3: Is the plugin already installed?
 
@@ -60,8 +60,8 @@ When real files exist in `.claude/`, migrate them to `.orqa/` before installing:
 
 ```bash
 # If .claude/CLAUDE.md is a real file (not symlink)
-mkdir -p .orqa/team/agents/
-cp .claude/CLAUDE.md .orqa/team/agents/orchestrator.md
+mkdir -p .orqa/process/agents/
+cp .claude/CLAUDE.md .orqa/process/agents/orchestrator.md
 ```
 
 Add orchestrator frontmatter if missing:
@@ -96,8 +96,8 @@ skills:
 
 ```bash
 # If .claude/rules/ contains real .md files
-mkdir -p .orqa/governance/rules/
-cp .claude/rules/*.md .orqa/governance/rules/
+mkdir -p .orqa/process/rules/
+cp .claude/rules/*.md .orqa/process/rules/
 ```
 
 Add rule frontmatter if missing. Each rule needs at minimum:
@@ -117,16 +117,16 @@ scope: []
 
 ```bash
 # If .claude/agents/ contains real .md files
-mkdir -p .orqa/team/agents/
-cp .claude/agents/*.md .orqa/team/agents/
+mkdir -p .orqa/process/agents/
+cp .claude/agents/*.md .orqa/process/agents/
 ```
 
 ### Step 4: Migrate skills
 
 ```bash
 # If .claude/skills/ contains real skill directories
-mkdir -p .orqa/team/skills/
-cp -r .claude/skills/*/ .orqa/team/skills/
+mkdir -p .orqa/process/skills/
+cp -r .claude/skills/*/ .orqa/process/skills/
 ```
 
 ### Step 5: Back up and remove originals
@@ -213,10 +213,10 @@ Write `.claude/settings.json`:
 
 Restart Claude Code. The plugin's SessionStart hook will:
 
-1. Create `.claude/CLAUDE.md` → `.orqa/team/agents/orchestrator.md` symlink
-2. Create `.claude/rules/` → `.orqa/governance/rules/` symlink
-3. Create `.claude/agents/` → `.orqa/team/agents/` symlink
-4. Create `.claude/skills/` → `.orqa/team/skills/` symlink
+1. Create `.claude/CLAUDE.md` → `.orqa/process/agents/orchestrator.md` symlink
+2. Create `.claude/rules/` → `.orqa/process/rules/` symlink
+3. Create `.claude/agents/` → `.orqa/process/agents/` symlink
+4. Create `.claude/skills/` → `.orqa/process/skills/` symlink
 5. Run session health checks (stashes, worktrees, uncommitted files)
 
 ## Fresh Install Path (no existing `.claude/`)
@@ -244,10 +244,10 @@ After installation, `.claude/` contains only:
 |------|------|---------|
 | `settings.json` | Real file | Plugin enablement, Claude Code config |
 | `worktrees/` | Real dir | Claude Code worktree state |
-| `CLAUDE.md` | Symlink | → `.orqa/team/agents/orchestrator.md` |
-| `rules/` | Symlink | → `.orqa/governance/rules/` |
-| `agents/` | Symlink | → `.orqa/team/agents/` |
-| `skills/` | Symlink | → `.orqa/team/skills/` |
+| `CLAUDE.md` | Symlink | → `.orqa/process/agents/orchestrator.md` |
+| `rules/` | Symlink | → `.orqa/process/rules/` |
+| `agents/` | Symlink | → `.orqa/process/agents/` |
+| `skills/` | Symlink | → `.orqa/process/skills/` |
 
 Everything in `.orqa/` is the source of truth. The symlinks are managed by the plugin.
 

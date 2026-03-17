@@ -8,10 +8,10 @@ The `.claude/` directory is NOT a standalone configuration. It is a set of **sym
 
 | `.claude/` path | → `.orqa/` artifact | Purpose |
 |---|---|---|
-| `CLAUDE.md` | `team/agents/orchestrator.md` | Your agent definition (the orchestrator) |
-| `rules/` | `governance/rules/` | Enforcement rules with YAML frontmatter |
-| `agents/` | `team/agents/` | All agent definitions (orchestrator, planner, implementer, etc.) |
-| `skills/` | `team/skills/` | Skill definitions loaded by prompt injection |
+| `CLAUDE.md` | `process/agents/orchestrator.md` | Your agent definition (the orchestrator) |
+| `rules/` | `process/rules/` | Enforcement rules with YAML frontmatter |
+| `agents/` | `process/agents/` | All agent definitions (orchestrator, planner, implementer, etc.) |
+| `skills/` | `process/skills/` | Skill definitions loaded by prompt injection |
 
 This means:
 - Editing a rule in `.claude/rules/RULE-001.md` edits the OrqaStudio artifact
