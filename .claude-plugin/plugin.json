@@ -1,0 +1,5 @@
+{
+  "name": "orqastudio-governance",
+  "description": "OrqaStudio governance integration for Claude Code — rules enforcement, skill injection, artifact graph browsing, and process workflow.",
+  "version": "0.1.0"
+}

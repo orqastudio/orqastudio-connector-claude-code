@@ -1,0 +1,41 @@
+{
+  "name": "@orqastudio/claude-code-cli",
+  "version": "0.1.0-dev",
+  "description": "Claude Code integration for OrqaStudio — governance hooks, skills, and /orqa commands.",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@orqastudio/types": "dev",
+    "@orqastudio/cli": "dev"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0"
+  },
+  "files": [
+    "dist",
+    "hooks",
+    "skills",
+    "commands",
+    ".claude-plugin"
+  ],
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git@github.com:orqastudio/claude-code-cli-plugin.git"
+  },
+  "license": "BSL-1.1"
+}
