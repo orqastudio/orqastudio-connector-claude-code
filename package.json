@@ -17,8 +17,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@orqastudio/types": "dev",
-    "@orqastudio/cli": "dev"
+    "@orqastudio/types": "0.1.0-dev",
+    "@orqastudio/cli": "0.1.0-dev"
   },
   "devDependencies": {
     "typescript": "^5.7.0"
