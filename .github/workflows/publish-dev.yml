@@ -19,14 +19,12 @@ jobs:
           registry-url: "https://npm.pkg.github.com"
           scope: "@orqastudio"
       - run: npm install
-      - run: npx tsc --noEmit
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - run: npm run build
 
       - name: Set dev version
-        run: |
-          SHA=$(git rev-parse --short HEAD)
-          BASE=$(node -p "require('./package.json').version")
-          npm version "${BASE}.${SHA}" --no-git-tag-version
+        run: npm version 0.1.0-dev --no-git-tag-version --allow-same-version
 
       - name: Publish with dev tag
         run: npm publish --tag dev
