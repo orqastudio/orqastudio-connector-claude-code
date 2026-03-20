@@ -54,6 +54,11 @@
         "key": "artifact-ids",
         "id": "KNOW-CC-005",
         "label": "Artifact ID Format & Generation"
+      },
+      {
+        "key": "tool-mapping",
+        "id": "KNOW-CC-tool-mapping",
+        "label": "Tool Mapping for Governance Operations"
       }
     ],
     "hooks": [

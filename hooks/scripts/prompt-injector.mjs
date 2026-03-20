@@ -1,21 +1,152 @@
 #!/usr/bin/env node
-// Prompt-based skill injector: examines user prompt, classifies intent,
-// and injects relevant domain skills as systemMessage.
+// Prompt-based knowledge injector: examines user prompt, finds relevant domain
+// knowledge via semantic search, and injects it as systemMessage.
 //
 // Used by UserPromptSubmit hook. Reads hook input from stdin.
-// Outputs JSON with systemMessage containing skill content.
+// Outputs JSON with systemMessage containing knowledge content.
 //
-// Intent classification currently uses keyword heuristics. Designed for
-// easy upgrade to AI classification (Haiku model call) when API access
-// is available in the hook context.
+// Primary path: semantic search via orqa mcp (JSON-RPC over stdio).
+// Fallback path: keyword-based INTENT_MAP when search is unavailable.
 
-import { readFileSync, readdirSync, existsSync, mkdirSync, writeFileSync } from "fs";
+import { readFileSync, existsSync, mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
+import { spawnSync } from "node:child_process";
 import { logTelemetry } from "./telemetry.mjs";
 
-// Intent-to-knowledge mapping table
-// Each entry: { keywords: string[], skills: string[], description: string }
-// Knowledge names must match directory names under .orqa/process/knowledge/ or app/.orqa/process/knowledge/
+// ---------------------------------------------------------------------------
+// Semantic search via MCP server
+// ---------------------------------------------------------------------------
+
+// Send a single-shot JSON-RPC request to `orqa mcp` and return parsed results.
+// Returns an array of knowledge directory names (e.g. ["orqa-store-patterns"])
+// or null if the search is unavailable or fails.
+function searchKnowledge(query, projectPath) {
+  // Truncate very long prompts — the search query doesn't need the full text.
+  const searchQuery = query.length > 200 ? query.slice(0, 200) : query;
+
+  // Two JSON-RPC messages: initialize + tools/call (newline-separated).
+  const initialize = JSON.stringify({
+    jsonrpc: "2.0",
+    id: 1,
+    method: "initialize",
+    params: {
+      protocolVersion: "2024-11-05",
+      capabilities: {},
+      clientInfo: { name: "prompt-injector", version: "1.0.0" },
+    },
+  });
+  const toolCall = JSON.stringify({
+    jsonrpc: "2.0",
+    id: 2,
+    method: "tools/call",
+    params: {
+      name: "search_semantic",
+      arguments: { query: searchQuery, scope: "artifacts", limit: 10 },
+    },
+  });
+
+  const input = `${initialize}\n${toolCall}\n`;
+
+  let result;
+  try {
+    result = spawnSync("orqa", ["mcp", projectPath], {
+      input,
+      encoding: "utf-8",
+      timeout: 5000,
+      windowsHide: true,
+    });
+  } catch {
+    return null;
+  }
+
+  // result.error is set when spawn fails (e.g. orqa not on PATH) or times out.
+  // result.status is null on timeout, non-zero on process error.
+  if (result.error || result.status !== 0 || !result.stdout) {
+    return null;
+  }
+
+  // Parse newline-delimited JSON-RPC responses.
+  // We want the response to id=2 (the tools/call).
+  const lines = result.stdout.split("\n").filter((l) => l.trim());
+  for (const line of lines) {
+    let parsed;
+    try {
+      parsed = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (parsed.id !== 2) continue;
+    if (parsed.error) return null;
+
+    // The tool result is inside result.content[0].text as a JSON string.
+    const textContent = parsed.result?.content?.[0]?.text;
+    if (!textContent) return null;
+
+    let hits;
+    try {
+      hits = JSON.parse(textContent);
+    } catch {
+      return null;
+    }
+    if (!Array.isArray(hits)) return null;
+
+    // Extract knowledge directory names from file paths.
+    // Paths look like: .orqa/process/knowledge/<name>/KNOW.md
+    // or: .orqa/process/knowledge/<name>.md
+    const names = extractKnowledgeNames(hits);
+    return names;
+  }
+
+  return null;
+}
+
+// Extract knowledge names from search result file paths.
+// Handles both directory-style (name/KNOW.md) and flat-file-style (name.md).
+function extractKnowledgeNames(hits) {
+  const names = new Set();
+
+  for (const hit of hits) {
+    const filePath = hit.file || hit.file_path || "";
+    if (!filePath) continue;
+
+    // Normalise separators.
+    const normalised = filePath.replace(/\\/g, "/");
+
+    // Match patterns under .orqa/process/knowledge/
+    const dirMatch = normalised.match(/\.orqa\/process\/knowledge\/([^/]+)\/[^/]+$/);
+    if (dirMatch) {
+      names.add(dirMatch[1]);
+      continue;
+    }
+    const flatMatch = normalised.match(/\.orqa\/process\/knowledge\/([^/]+)\.md$/);
+    if (flatMatch) {
+      names.add(flatMatch[1]);
+      continue;
+    }
+
+    // Match plugin knowledge/ paths (e.g. plugins/claude-code/knowledge/<name>/KNOW.md)
+    const pluginDirMatch = normalised.match(/knowledge\/([^/]+)\/KNOW\.md$/);
+    if (pluginDirMatch) {
+      names.add(pluginDirMatch[1]);
+      continue;
+    }
+    const pluginFlatMatch = normalised.match(/knowledge\/([^/]+)\.md$/);
+    if (pluginFlatMatch) {
+      const candidate = pluginFlatMatch[1];
+      // Exclude generic filenames that aren't knowledge entries.
+      if (candidate !== "context-reminder" && candidate !== "README") {
+        names.add(candidate);
+      }
+    }
+  }
+
+  return [...names];
+}
+
+// ---------------------------------------------------------------------------
+// INTENT_MAP: fallback when semantic search unavailable.
+// Remove when search is always available.
+// ---------------------------------------------------------------------------
 const INTENT_MAP = [
   // ── Backend / IPC ──────────────────────────────────────────────────────────
   {
@@ -263,9 +394,9 @@ const INTENT_MAP = [
   },
 ];
 
-// Classify intent from user prompt using keyword matching
-// Returns array of unique skill names to inject
-function classifyIntent(prompt) {
+// Classify intent from user prompt using keyword matching (INTENT_MAP fallback).
+// Returns array of unique skill names to inject.
+function classifyIntentFallback(prompt) {
   const lower = prompt.toLowerCase();
   const matchedSkills = new Set();
 
@@ -280,6 +411,10 @@ function classifyIntent(prompt) {
 
   return [...matchedSkills];
 }
+
+// ---------------------------------------------------------------------------
+// Deduplication state
+// ---------------------------------------------------------------------------
 
 // Read the session-level injected skills state
 function readInjectedSkills(projectDir) {
@@ -301,7 +436,11 @@ function writeInjectedSkills(projectDir, skills) {
   writeFileSync(join(tmpDir, ".injected-skills.json"), JSON.stringify(skills));
 }
 
-// Strip YAML frontmatter from skill content
+// ---------------------------------------------------------------------------
+// Knowledge file loading
+// ---------------------------------------------------------------------------
+
+// Strip YAML frontmatter from knowledge content
 function stripFrontmatter(content) {
   const match = content.match(/^---\n[\s\S]*?\n---\n([\s\S]*)$/);
   if (match) return match[1].trim();
@@ -309,13 +448,14 @@ function stripFrontmatter(content) {
 }
 
 // Read knowledge files, deduplicating against already-injected.
+// Caps injection at maxKnowledge files per call.
 // Returns { content: string|null, injected: string[], dedupCount: number }
-function collectKnowledgeContent(projectDir, skillNames) {
+function collectKnowledgeContent(projectDir, skillNames, maxKnowledge = 5) {
   const alreadyInjected = readInjectedSkills(projectDir);
   const alreadySet = new Set(alreadyInjected);
 
-  // Filter to only new skills
-  const newSkills = skillNames.filter((name) => !alreadySet.has(name));
+  // Filter to only new skills, then cap at maxKnowledge.
+  const newSkills = skillNames.filter((name) => !alreadySet.has(name)).slice(0, maxKnowledge);
   const dedupCount = skillNames.length - newSkills.length;
   if (newSkills.length === 0) return { content: null, injected: [], dedupCount };
 
@@ -357,6 +497,10 @@ function collectKnowledgeContent(projectDir, skillNames) {
 
   return { content: parts.join("\n\n---\n\n"), injected: injectedNow, dedupCount };
 }
+
+// ---------------------------------------------------------------------------
+// Project settings and context reminder
+// ---------------------------------------------------------------------------
 
 // Read project.json and extract settings for template resolution
 function readProjectSettings(projectDir) {
@@ -402,7 +546,29 @@ function readContextReminder(projectDir) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Skill resolution (semantic search primary, INTENT_MAP fallback)
+// ---------------------------------------------------------------------------
+
+// Resolve skill names to inject for a given prompt.
+// Tries semantic search first; falls back to INTENT_MAP if search unavailable.
+// Returns { skillNames: string[], source: "semantic_search" | "intent_map_fallback" }
+function resolveSkillNames(userMessage, projectDir) {
+  // Attempt semantic search.
+  const searchResults = searchKnowledge(userMessage, projectDir);
+  if (searchResults !== null && searchResults.length > 0) {
+    return { skillNames: searchResults, source: "semantic_search" };
+  }
+
+  // Fallback to keyword INTENT_MAP.
+  const fallbackSkills = classifyIntentFallback(userMessage);
+  return { skillNames: fallbackSkills, source: "intent_map_fallback" };
+}
+
+// ---------------------------------------------------------------------------
 // Main
+// ---------------------------------------------------------------------------
+
 async function main() {
   const startTime = Date.now();
 
@@ -427,7 +593,7 @@ async function main() {
 
   const parts = [];
 
-  // Always inject context reminder with resolved project variables
+  // Always inject context reminder with resolved project variables.
   const reminder = readContextReminder(projectDir);
   if (reminder) {
     parts.push(reminder);
@@ -437,31 +603,73 @@ async function main() {
   // The orchestrator delegates — it doesn't implement. Implementation agents
   // receive domain skills via their Agent tool prompt, not via this hook.
   // Only the context reminder (above) injects into the orchestrator.
+  //
+  // To enable knowledge injection, remove this block and let execution fall
+  // through to the injection section below.
+  {
+    if (parts.length === 0) {
+      logTelemetry("prompt-injector", "UserPromptSubmit", startTime, "skipped", {
+        source: null,
+        query: userMessage.slice(0, 100),
+        matches: 0,
+        knowledge_injected: [],
+        dedup_count: 0,
+        action: "allow",
+      }, projectDir);
+      process.exit(0);
+    }
+
+    logTelemetry("prompt-injector", "UserPromptSubmit", startTime, "injected", {
+      source: null,
+      query: userMessage.slice(0, 100),
+      matches: 0,
+      knowledge_injected: [],
+      dedup_count: 0,
+      action: "allow",
+      reminder_injected: true,
+    }, projectDir);
+
+    const output = JSON.stringify({ systemMessage: parts.join("\n\n---\n\n") });
+    process.stdout.write(output);
+    process.exit(0);
+  }
+
+  // Knowledge injection block — reached when injection is enabled (above block removed).
+  // Uses semantic search primary, INTENT_MAP fallback.
+  /* eslint-disable no-unreachable */
+  const { skillNames, source } = resolveSkillNames(userMessage, projectDir);
+  const { content, injected, dedupCount } = collectKnowledgeContent(projectDir, skillNames);
+
+  if (content) {
+    parts.push(content);
+  }
 
   if (parts.length === 0) {
     logTelemetry("prompt-injector", "UserPromptSubmit", startTime, "skipped", {
+      source,
+      query: userMessage.slice(0, 100),
+      matches: skillNames.length,
       knowledge_injected: [],
-      intent_matched: false,
-      dedup_count: 0,
+      dedup_count: dedupCount,
       action: "allow",
     }, projectDir);
     process.exit(0);
   }
 
   logTelemetry("prompt-injector", "UserPromptSubmit", startTime, "injected", {
-    knowledge_injected: [],
-    intent_matched: false,
-    dedup_count: 0,
+    source,
+    query: userMessage.slice(0, 100),
+    matches: skillNames.length,
+    knowledge_injected: injected,
+    dedup_count: dedupCount,
     action: "allow",
-    reminder_injected: true,
+    reminder_injected: reminder.length > 0,
   }, projectDir);
 
-  // Return combined content as systemMessage
-  const output = JSON.stringify({
-    systemMessage: parts.join("\n\n---\n\n"),
-  });
+  const output = JSON.stringify({ systemMessage: parts.join("\n\n---\n\n") });
   process.stdout.write(output);
   process.exit(0);
+  /* eslint-enable no-unreachable */
 }
 
 main().catch(() => process.exit(0));
