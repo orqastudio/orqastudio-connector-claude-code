@@ -54,8 +54,42 @@ const NATIVE_SKILLS = new Set([
   "delegation-patterns",
   "governance-context",
   "artifact-creation",
+  "artifact-ids",
   "plugin-setup",
   "rule-enforcement",
+]);
+
+// Proactive skills — synced because agents need them BEFORE acting.
+// Everything else is available via MCP on demand (graph_query + graph_read).
+const PROACTIVE_SKILLS = new Set([
+  // Agent preloads (from agent skills: frontmatter)
+  "composability",
+  "centralized-logging",
+  // Coding standards
+  "svelte5-best-practices",
+  "tailwind-design-system",
+  "rust-async-patterns",
+  "typescript-advanced-types",
+  "orqa-frontend-best-practices",
+  "orqa-backend-best-practices",
+  // Intent-mapped skills (from prompt-injector INTENT_MAP)
+  "orqa-ipc-patterns",
+  "orqa-error-composition",
+  "orqa-store-patterns",
+  "orqa-store-orchestration",
+  "orqa-domain-services",
+  "orqa-repository-pattern",
+  "orqa-streaming",
+  "planning",
+  "systems-thinking",
+  "orqa-governance",
+  "orqa-documentation",
+  "diagnostic-methodology",
+  "orqa-testing",
+  "orqa-code-search",
+  "restructuring-methodology",
+  // Search
+  "search",
 ]);
 
 /**
@@ -113,6 +147,11 @@ for (const sourceDir of SKILL_SOURCES) {
     // Skip connector-native skills
     if (NATIVE_SKILLS.has(skillName)) {
       skipped++;
+      continue;
+    }
+
+    // Only sync proactive skills — everything else is available via MCP on demand
+    if (!PROACTIVE_SKILLS.has(skillName)) {
       continue;
     }
 
