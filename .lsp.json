@@ -1,14 +1,24 @@
 {
-  "orqastudio": {
-    "command": "orqa",
-    "args": ["lsp"],
+  "rust": {
+    "command": "rust-analyzer",
     "extensionToLanguage": {
-      ".md": "markdown"
+      ".rs": "rust"
+    }
+  },
+  "svelte": {
+    "command": "svelteserver",
+    "args": [
+      "--stdio"
+    ],
+    "extensionToLanguage": {
+      ".svelte": "svelte"
     }
   },
   "typescript": {
     "command": "typescript-language-server",
-    "args": ["--stdio"],
+    "args": [
+      "--stdio"
+    ],
     "extensionToLanguage": {
       ".ts": "typescript",
       ".tsx": "typescriptreact",
@@ -16,17 +26,13 @@
       ".jsx": "javascriptreact"
     }
   },
-  "svelte": {
-    "command": "svelteserver",
-    "args": ["--stdio"],
+  "orqastudio": {
+    "command": "orqa",
+    "args": [
+      "lsp"
+    ],
     "extensionToLanguage": {
-      ".svelte": "svelte"
-    }
-  },
-  "rust": {
-    "command": "rust-analyzer",
-    "extensionToLanguage": {
-      ".rs": "rust"
+      ".md": "markdown"
     }
   }
 }

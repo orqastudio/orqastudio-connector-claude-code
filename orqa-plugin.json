@@ -9,6 +9,22 @@
     "views": [],
     "widgets": [],
     "relationships": [],
+    "lspServers": {
+      "orqastudio": {
+        "command": "orqa",
+        "args": ["lsp"],
+        "extensionToLanguage": {
+          ".md": "markdown"
+        }
+      }
+    },
+    "mcpServers": {
+      "orqastudio": {
+        "type": "stdio",
+        "command": "orqa",
+        "args": ["mcp"]
+      }
+    },
     "skills": [
       {
         "key": "plugin-setup",

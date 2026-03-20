@@ -3,8 +3,9 @@
     "orqastudio": {
       "type": "stdio",
       "command": "orqa",
-      "args": ["mcp"],
-      "env": {}
+      "args": [
+        "mcp"
+      ]
     }
   }
 }

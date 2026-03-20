@@ -98,6 +98,14 @@ if [ -n "$PLUGIN_ROOT" ] && [ -f "$PLUGIN_ROOT/hooks/scripts/sync-skills.mjs" ];
     node "$PLUGIN_ROOT/hooks/scripts/sync-skills.mjs" 2>/dev/null || true
 fi
 
+# ─── Server Sync ─────────────────────────────────────────────────────────────
+# Aggregate LSP/MCP server declarations from all installed plugins into
+# .lsp.json and .mcp.json (AD-059: central registration via manifests).
+if [ -n "$PLUGIN_ROOT" ] && [ -f "$PLUGIN_ROOT/hooks/scripts/sync-servers.mjs" ]; then
+  CLAUDE_PROJECT_DIR="$PROJECT_DIR" CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" \
+    node "$PLUGIN_ROOT/hooks/scripts/sync-servers.mjs" 2>/dev/null || true
+fi
+
 # ─── Session Guard ───────────────────────────────────────────────────────────
 # Only run health checks once per session
 GUARD="$PROJECT_DIR/tmp/.session-started"
