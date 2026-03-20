@@ -224,7 +224,8 @@ role: artifacts
 label: "Epics"
 description: "Trackable work units that group related tasks together."
 icon: "layers"
-sort: 2  - target: DOC-a1b2c3d4
+sort: 2
+  - target: DOC-a1b2c3d4
     type: synchronised-with
 
 ---

@@ -105,7 +105,8 @@ id: DOC-NNN
 title: Page Title
 description: Brief description for nav sidebar.
 created: "YYYY-MM-DD"
-updated: "YYYY-MM-DD"  - target: DOC-4b4fbc0f
+updated: "YYYY-MM-DD"
+  - target: DOC-4b4fbc0f
     type: synchronised-with
 
 ---
