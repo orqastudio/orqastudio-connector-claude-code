@@ -4,9 +4,9 @@
  * This is the TypeScript equivalent of the prompt-injector.mjs hook script,
  * extracted for reuse by other consumers.
  *
- * Skills are markdown artifacts in .orqa/process/skills/<name>/SKILL.md.
- * The injector maps user intent keywords to skill names, deduplicates
- * across a session, and returns the skill content for prompt injection.
+ * Knowledge files are markdown artifacts in .orqa/process/knowledge/<name>/KNOW.md.
+ * The injector maps user intent keywords to knowledge names, deduplicates
+ * across a session, and returns the knowledge content for prompt injection.
  */
 export interface IntentMapping {
     keywords: string[];
@@ -37,7 +37,7 @@ export declare class PromptInjector {
      * Reset session tracking (called on new session).
      */
     resetSession(): void;
-    private loadSkillContent;
+    private loadKnowledgeContent;
     private loadTracking;
     private saveTracking;
 }

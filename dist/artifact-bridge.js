@@ -5,7 +5,6 @@
  * - CLAUDE.md → .orqa/process/agents/orchestrator.md (the orchestrator agent)
  * - rules/   → .orqa/process/rules/ (governance rules with enforcement YAML)
  * - agents/  → .orqa/process/agents/ (all agent definitions)
- * - skills/  → .orqa/process/skills/ (contextual skill definitions)
  *
  * This bridge:
  * 1. Creates/maintains the symlinks on session start
@@ -35,12 +34,6 @@ const BRIDGE_MAPPINGS = [
         orqaPath: ".orqa/process/agents",
         isDirectory: true,
         description: "Agent role definitions (orchestrator, planner, implementer, etc.)",
-    },
-    {
-        claudePath: "skills",
-        orqaPath: ".orqa/process/skills",
-        isDirectory: true,
-        description: "Contextual skill definitions for prompt injection",
     },
 ];
 export class ArtifactBridge {
@@ -155,18 +148,7 @@ export class ArtifactBridge {
         const skillsDir = path.join(this.orqaDir, "process", "skills");
         if (!fs.existsSync(skillsDir))
             return [];
-        const results = [];
-        for (const entry of fs.readdirSync(skillsDir, { withFileTypes: true })) {
-            if (entry.isDirectory()) {
-                const skillMd = path.join(skillsDir, entry.name, "SKILL.md");
-                if (fs.existsSync(skillMd)) {
-                    const info = this.parseArtifactHeader(skillMd);
-                    if (info)
-                        results.push(info);
-                }
-            }
-        }
-        return results;
+        return this.listArtifacts(skillsDir);
     }
     /**
      * List all rules from the .orqa/ rules directory.

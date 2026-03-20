@@ -9,12 +9,12 @@
 // easy upgrade to AI classification (Haiku model call) when API access
 // is available in the hook context.
 
-import { readFileSync, existsSync, mkdirSync, writeFileSync } from "fs";
+import { readFileSync, readdirSync, existsSync, mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
 
-// Intent-to-skill mapping table
+// Intent-to-knowledge mapping table
 // Each entry: { keywords: string[], skills: string[], description: string }
-// Skill names must match directory names under .orqa/process/skills/ or app/.orqa/process/skills/
+// Knowledge names must match directory names under .orqa/process/knowledge/ or app/.orqa/process/knowledge/
 const INTENT_MAP = [
   {
     keywords: ["tauri command", "ipc", "invoke", "#[tauri::command]", "add a command", "new command"],
@@ -72,7 +72,7 @@ const INTENT_MAP = [
     description: "Code search",
   },
   {
-    keywords: ["governance", "rule", "skill", "artifact", "enforcement"],
+    keywords: ["governance", "rule", "knowledge", "artifact", "enforcement"],
     skills: ["orqa-governance", "orqa-documentation"],
     description: "Governance work",
   },
@@ -133,8 +133,8 @@ function stripFrontmatter(content) {
   return content.trim();
 }
 
-// Read skill files, deduplicating against already-injected
-function collectSkillContent(projectDir, skillNames) {
+// Read knowledge files, deduplicating against already-injected
+function collectKnowledgeContent(projectDir, skillNames) {
   const alreadyInjected = readInjectedSkills(projectDir);
   const alreadySet = new Set(alreadyInjected);
 
@@ -145,16 +145,24 @@ function collectSkillContent(projectDir, skillNames) {
   const parts = [];
   const injectedNow = [];
 
+  const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT || "";
+
   for (const name of newSkills) {
-    // Search project-level skills first, then app-level (for core skills)
+    // Search plugin knowledge/ first, then project-level, then app-level.
+    // KNOW.md is the canonical filename post-rename; SKILL.md is the legacy fallback.
     const candidates = [
-      join(projectDir, ".orqa", "process", "skills", `${name}.md`),
-      join(projectDir, "app", ".orqa", "process", "skills", `${name}.md`),
-    ];
-    const skillPath = candidates.find((p) => existsSync(p));
-    if (!skillPath) continue;
+      pluginRoot ? join(pluginRoot, "knowledge", name, "KNOW.md") : "",
+      pluginRoot ? join(pluginRoot, "knowledge", name, "SKILL.md") : "",
+      pluginRoot ? join(pluginRoot, "knowledge", `${name}.md`) : "",
+      join(projectDir, ".orqa", "process", "knowledge", name, "KNOW.md"),
+      join(projectDir, ".orqa", "process", "knowledge", `${name}.md`),
+      join(projectDir, "app", ".orqa", "process", "knowledge", name, "KNOW.md"),
+      join(projectDir, "app", ".orqa", "process", "knowledge", `${name}.md`),
+    ].filter(Boolean);
+    const knowledgePath = candidates.find((p) => existsSync(p));
+    if (!knowledgePath) continue;
     try {
-      const raw = readFileSync(skillPath, "utf-8");
+      const raw = readFileSync(knowledgePath, "utf-8");
       const content = stripFrontmatter(raw);
       if (content) {
         parts.push(content);
@@ -171,6 +179,50 @@ function collectSkillContent(projectDir, skillNames) {
   writeInjectedSkills(projectDir, [...alreadyInjected, ...injectedNow]);
 
   return parts.join("\n\n---\n\n");
+}
+
+// Read project.json and extract settings for template resolution
+function readProjectSettings(projectDir) {
+  const projectJsonPath = join(projectDir, ".orqa", "project.json");
+  if (!existsSync(projectJsonPath)) return {};
+  try {
+    return JSON.parse(readFileSync(projectJsonPath, "utf-8"));
+  } catch {
+    return {};
+  }
+}
+
+// Resolve {{variables}} in template from project settings
+function resolveTemplate(template, projectDir) {
+  const settings = readProjectSettings(projectDir);
+  const pluginsConfig = settings.plugins || {};
+  const plugins = Object.entries(pluginsConfig)
+    .filter(([, cfg]) => cfg.installed && cfg.enabled)
+    .map(([name]) => name);
+
+  const vars = {
+    "project.name": settings.name || "unknown",
+    "project.dogfood": settings.dogfood ? "active — you are editing the app from the CLI" : "inactive",
+    "project.plugins": plugins.length > 0 ? plugins.join(", ") : "none",
+  };
+
+  return template.replace(/\{\{(\w+(?:\.\w+)*)\}\}/g, (match, key) => {
+    return vars[key] ?? match;
+  });
+}
+
+// Read the context reminder from plugin root and resolve template variables
+function readContextReminder(projectDir) {
+  const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT || "";
+  if (!pluginRoot) return "";
+  const reminderPath = join(pluginRoot, "context-reminder.md");
+  if (!existsSync(reminderPath)) return "";
+  try {
+    const template = readFileSync(reminderPath, "utf-8").trim();
+    return resolveTemplate(template, projectDir);
+  } catch {
+    return "";
+  }
 }
 
 // Main
@@ -194,21 +246,26 @@ async function main() {
     process.exit(0);
   }
 
-  // Classify intent and determine which skills to inject
-  const skillNames = classifyIntent(userMessage);
-  if (skillNames.length === 0) {
+  const parts = [];
+
+  // Always inject context reminder with resolved project variables
+  const reminder = readContextReminder(projectDir);
+  if (reminder) {
+    parts.push(reminder);
+  }
+
+  // Skill injection is DISABLED for the orchestrator's UserPromptSubmit hook.
+  // The orchestrator delegates — it doesn't implement. Implementation agents
+  // receive domain skills via their Agent tool prompt, not via this hook.
+  // Only the context reminder (above) injects into the orchestrator.
+
+  if (parts.length === 0) {
     process.exit(0);
   }
 
-  // Read and deduplicate skill content
-  const skillContent = collectSkillContent(projectDir, skillNames);
-  if (!skillContent) {
-    process.exit(0);
-  }
-
-  // Return skill content as systemMessage
+  // Return combined content as systemMessage
   const output = JSON.stringify({
-    systemMessage: skillContent,
+    systemMessage: parts.join("\n\n---\n\n"),
   });
   process.stdout.write(output);
   process.exit(0);

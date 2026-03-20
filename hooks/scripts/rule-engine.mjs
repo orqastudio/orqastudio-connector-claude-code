@@ -231,8 +231,8 @@ function stripFrontmatter(content) {
   return content.trim();
 }
 
-// Read skill content for injection, deduplicating against already-injected skills
-function collectSkillContent(projectDir, injectViolations) {
+// Read knowledge content for injection, deduplicating against already-injected skills
+function collectKnowledgeContent(projectDir, injectViolations) {
   const alreadyInjected = readInjectedSkills(projectDir);
   const alreadySet = new Set(alreadyInjected);
 
@@ -254,15 +254,17 @@ function collectSkillContent(projectDir, injectViolations) {
   const parts = [];
   const injectedNow = [];
   for (const name of allSkillNames) {
-    // Search project-level skills first, then app-level (for core skills)
+    // Search project-level knowledge first, then app-level (for core knowledge)
     const candidates = [
-      join(projectDir, ".orqa", "process", "skills", `${name}.md`),
-      join(projectDir, "app", ".orqa", "process", "skills", `${name}.md`),
+      join(projectDir, ".orqa", "process", "knowledge", name, "KNOW.md"),
+      join(projectDir, ".orqa", "process", "knowledge", `${name}.md`),
+      join(projectDir, "app", ".orqa", "process", "knowledge", name, "KNOW.md"),
+      join(projectDir, "app", ".orqa", "process", "knowledge", `${name}.md`),
     ];
-    const skillPath = candidates.find((p) => existsSync(p));
-    if (!skillPath) continue;
+    const knowledgePath = candidates.find((p) => existsSync(p));
+    if (!knowledgePath) continue;
     try {
-      const raw = readFileSync(skillPath, "utf-8");
+      const raw = readFileSync(knowledgePath, "utf-8");
       const content = stripFrontmatter(raw);
       if (content) {
         parts.push(content);
@@ -317,9 +319,9 @@ async function main() {
   const warnViolations = violations.filter((v) => v.action === "warn");
   const injectViolations = violations.filter((v) => v.action === "inject");
 
-  // Collect skill content for inject entries (with session dedup)
-  const skillContent = injectViolations.length > 0
-    ? collectSkillContent(projectDir, injectViolations)
+  // Collect knowledge content for inject entries (with session dedup)
+  const knowledgeContent = injectViolations.length > 0
+    ? collectKnowledgeContent(projectDir, injectViolations)
     : null;
 
   // Determine overall action: block > warn > inject-only
@@ -333,7 +335,7 @@ async function main() {
     );
     const combinedMessage = [
       ...messages,
-      ...(skillContent ? [skillContent] : []),
+      ...(knowledgeContent ? [knowledgeContent] : []),
     ].join("\n");
 
     const output = JSON.stringify({
@@ -344,12 +346,12 @@ async function main() {
     });
     process.stderr.write(output);
     process.exit(2);
-  } else if (hasWarn || skillContent) {
-    // Non-blocking: warn and/or inject skills
+  } else if (hasWarn || knowledgeContent) {
+    // Non-blocking: warn and/or inject knowledge
     const messages = warnViolations.map((v) => `[${v.ruleId}] ${v.message}`);
     const combinedMessage = [
       ...messages,
-      ...(skillContent ? [skillContent] : []),
+      ...(knowledgeContent ? [knowledgeContent] : []),
     ].join("\n");
 
     const output = JSON.stringify({

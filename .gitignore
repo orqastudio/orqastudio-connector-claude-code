@@ -1,2 +1,5 @@
 node_modules/
 .claude/
+# Generated at install time by `orqa plugin install` — not tracked in repo
+.mcp.json
+.lsp.json

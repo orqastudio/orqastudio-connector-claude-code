@@ -21,7 +21,7 @@ OrqaStudio manages work through an **artifact graph** — markdown files with YA
 | Decisions | `.orqa/process/decisions/` |
 | Rules | `.orqa/process/rules/` |
 | Lessons | `.orqa/process/lessons/` |
-| Skills | `.orqa/process/skills/*.md` |
+| Knowledge | `.orqa/process/knowledge/*/KNOW.md` |
 | Agents | `.orqa/process/agents/` |
 | Documentation | `.orqa/documentation/` |
 | Project config | `.orqa/project.json` |
@@ -77,22 +77,22 @@ From `core.json`:
 - `drives`/`driven-by` only FROM decision
 - `observes`/`observed-by` only FROM agent
 
-## MCP Skill Discovery
+## MCP Knowledge Discovery
 
 When you need domain knowledge beyond what's preloaded, query the MCP server:
 
 ```
-# Find skills by keyword
-graph_query({ type: "skill", search: "composability" })
+# Find knowledge artifacts by keyword
+graph_query({ type: "knowledge", search: "composability" })
 
 # Search only governance artifacts
-graph_query({ type: "skill", search: "testing", scope: "artifacts" })
+graph_query({ type: "knowledge", search: "testing", scope: "artifacts" })
 
-# Read a skill's full content
-graph_read({ path: ".orqa/process/skills/search.md" })
+# Read a knowledge artifact's full content
+graph_read({ path: ".orqa/process/knowledge/search/KNOW.md" })
 
-# Get a skill's relationships (which agents use it)
-graph_relationships({ id: "SKILL-f0c40eaf" })
+# Get a knowledge artifact's relationships (which agents use it)
+graph_relationships({ id: "KNOW-f0c40eaf" })
 ```
 
 Use `scope: "artifacts"` to search only `.orqa/` content. Use `scope: "codebase"` for source code.

@@ -11,13 +11,11 @@ The `.claude/` directory is NOT a standalone configuration. It is a set of **sym
 | `CLAUDE.md` | `process/agents/orchestrator.md` | Your agent definition (the orchestrator) |
 | `rules/` | `process/rules/` | Enforcement rules with YAML frontmatter |
 | `agents/` | `process/agents/` | All agent definitions (orchestrator, planner, implementer, etc.) |
-| `skills/` | `process/skills/` | Skill definitions loaded by prompt injection |
 
 This means:
 - Editing a rule in `.claude/rules/RULE-532100d9.md` edits the OrqaStudio artifact
 - Rules have structured YAML frontmatter with `enforcement` arrays
 - Agent definitions follow OrqaStudio's agent artifact schema
-- Skills follow OrqaStudio's skill artifact schema
 
 ## Browsing the artifact graph
 
@@ -52,7 +50,7 @@ orqa graph --type decision --json
 2. **Decisions** (`.orqa/process/decisions/`) — Architecture decisions (AD-nnn). These drive implementation.
 3. **Rules** (`.orqa/process/rules/`) — Enforcement rules. Some have `enforcement` arrays that trigger on your actions.
 4. **Lessons** (`.orqa/process/lessons/`) — Documented mistakes and patterns. Check before repeating.
-5. **Skills** (`.orqa/process/skills/`) — Contextual instructions injected by the prompt-injector hook.
+5. **Knowledge** (`.orqa/process/knowledge/`) — Domain knowledge injected into agent prompts by the prompt-injector hook.
 6. **Agents** (`.orqa/process/agents/`) — Role definitions. Your CLAUDE.md IS the orchestrator agent.
 
 ## Relationship vocabulary

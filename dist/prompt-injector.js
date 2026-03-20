@@ -4,27 +4,29 @@
  * This is the TypeScript equivalent of the prompt-injector.mjs hook script,
  * extracted for reuse by other consumers.
  *
- * Skills are markdown artifacts in .orqa/process/skills/<name>/SKILL.md.
- * The injector maps user intent keywords to skill names, deduplicates
- * across a session, and returns the skill content for prompt injection.
+ * Knowledge files are markdown artifacts in .orqa/process/knowledge/<name>/KNOW.md.
+ * The injector maps user intent keywords to knowledge names, deduplicates
+ * across a session, and returns the knowledge content for prompt injection.
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
-/** Default intent → skill mappings. Can be extended by plugins. */
+/** Default intent → knowledge mappings. Can be extended by plugins.
+ *  Knowledge names must match directory names under .orqa/process/knowledge/ or app/.orqa/process/knowledge/. */
 const DEFAULT_INTENT_MAP = [
-    { keywords: ["ipc", "invoke", "tauri", "command"], skills: ["ipc-patterns"] },
-    { keywords: ["store", "state", "svelte-store", "reactive"], skills: ["state-management"] },
-    { keywords: ["component", "svelte", "ui", "widget", "view"], skills: ["component-patterns"] },
-    { keywords: ["domain", "business", "model", "entity"], skills: ["domain-modelling"] },
-    { keywords: ["repository", "repo", "database", "sqlite"], skills: ["repository-patterns"] },
-    { keywords: ["stream", "sidecar", "ndjson", "provider"], skills: ["streaming-patterns"] },
-    { keywords: ["plan", "design", "architect", "approach"], skills: ["planning"] },
-    { keywords: ["review", "pr", "pull request", "check"], skills: ["code-review"] },
-    { keywords: ["debug", "fix", "error", "bug", "crash"], skills: ["debugging"] },
-    { keywords: ["test", "spec", "assert", "verify"], skills: ["testing"] },
-    { keywords: ["search", "find", "embed", "semantic"], skills: ["search-patterns"] },
-    { keywords: ["governance", "rule", "enforce", "compliance"], skills: ["governance"] },
-    { keywords: ["refactor", "rename", "extract", "clean"], skills: ["refactoring"] },
+    { keywords: ["ipc", "invoke", "tauri", "command"], skills: ["orqa-ipc-patterns", "orqa-error-composition"] },
+    { keywords: ["store", "state", "svelte-store", "reactive", "rune"], skills: ["orqa-store-patterns", "orqa-store-orchestration"] },
+    { keywords: ["component", "svelte", "ui", "widget", "view"], skills: ["svelte5-best-practices", "tailwind-design-system"] },
+    { keywords: ["domain", "business", "model", "entity"], skills: ["orqa-domain-services", "orqa-error-composition"] },
+    { keywords: ["repository", "repo", "database", "sqlite"], skills: ["orqa-repository-pattern"] },
+    { keywords: ["stream", "sidecar", "ndjson", "provider"], skills: ["orqa-streaming"] },
+    { keywords: ["plan", "design", "architect", "approach"], skills: ["planning", "systems-thinking"] },
+    { keywords: ["review", "pr", "pull request", "check"], skills: ["orqa-governance"] },
+    { keywords: ["debug", "fix", "error", "bug", "crash"], skills: ["diagnostic-methodology", "systems-thinking"] },
+    { keywords: ["test", "spec", "assert", "verify"], skills: ["orqa-testing"] },
+    { keywords: ["search", "find", "embed", "semantic"], skills: ["orqa-code-search"] },
+    { keywords: ["governance", "rule", "enforce", "compliance"], skills: ["orqa-governance", "orqa-documentation"] },
+    { keywords: ["refactor", "rename", "extract", "clean"], skills: ["restructuring-methodology", "systems-thinking"] },
+    { keywords: ["log", "logging", "logger", "tracing"], skills: ["centralized-logging"] },
 ];
 export class PromptInjector {
     projectRoot;
@@ -62,7 +64,7 @@ export class PromptInjector {
         const contents = [];
         const injected = [];
         for (const skillName of matchedSkills) {
-            const content = this.loadSkillContent(skillName);
+            const content = this.loadKnowledgeContent(skillName);
             if (content) {
                 contents.push(content);
                 injected.push(skillName);
@@ -92,13 +94,18 @@ export class PromptInjector {
     // -----------------------------------------------------------------------
     // Private helpers
     // -----------------------------------------------------------------------
-    loadSkillContent(skillName) {
-        const skillPaths = [
-            path.join(this.projectRoot, ".orqa", "process", "skills", skillName, "SKILL.md"),
+    loadKnowledgeContent(skillName) {
+        const candidates = [
+            // Project-level knowledge (primary)
+            path.join(this.projectRoot, ".orqa", "process", "knowledge", skillName, "KNOW.md"),
+            path.join(this.projectRoot, ".orqa", "process", "knowledge", `${skillName}.md`),
+            // App-level knowledge (monorepo)
+            path.join(this.projectRoot, "app", ".orqa", "process", "knowledge", skillName, "KNOW.md"),
+            path.join(this.projectRoot, "app", ".orqa", "process", "knowledge", `${skillName}.md`),
         ];
-        for (const skillPath of skillPaths) {
-            if (fs.existsSync(skillPath)) {
-                const content = fs.readFileSync(skillPath, "utf-8");
+        for (const candidatePath of candidates) {
+            if (fs.existsSync(candidatePath)) {
+                const content = fs.readFileSync(candidatePath, "utf-8");
                 // Strip YAML frontmatter before injecting
                 return content.replace(/^---\n[\s\S]*?\n---\n/, "").trim();
             }

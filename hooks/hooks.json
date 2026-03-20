@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node hooks/scripts/rule-engine.mjs",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/rule-engine.mjs",
             "timeout": 10000
           }
         ]
@@ -18,7 +18,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node hooks/scripts/validate-artifact.mjs",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/validate-artifact.mjs",
             "timeout": 10000
           }
         ]
@@ -30,7 +30,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node hooks/scripts/prompt-injector.mjs",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/prompt-injector.mjs",
             "timeout": 10000
           }
         ]
@@ -42,7 +42,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash hooks/scripts/session-start.sh",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/session-start.sh",
             "timeout": 15000
           }
         ]
@@ -54,7 +54,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash hooks/scripts/stop-checklist.sh",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/stop-checklist.sh",
             "timeout": 10000
           }
         ]
@@ -66,7 +66,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node hooks/scripts/save-context.mjs",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/save-context.mjs",
             "timeout": 10000
           }
         ]
@@ -78,7 +78,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node hooks/scripts/subagent-review.mjs",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/subagent-review.mjs",
             "timeout": 15000
           }
         ]

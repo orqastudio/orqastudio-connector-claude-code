@@ -1,5 +1,5 @@
 ---
-id: SKILL-CC-5ebf82dc
+id: KNOW-CC-5ebf82dc
 title: OrqaStudio Plugin Setup
 description: Installs the OrqaStudio companion plugin for Claude Code. Detects existing .claude/ infrastructure, migrates to .orqa/, registers the plugin, and sets up symlinks.
 status: active
@@ -43,7 +43,7 @@ file .claude/CLAUDE.md .claude/rules .claude/agents .claude/skills 2>/dev/null
 | `.claude/CLAUDE.md` is a symlink to `.orqa/` | Already set up for OrqaStudio | Just install plugin |
 | `.claude/rules/` contains real `.md` files | Existing rules | Migrate to `.orqa/process/rules/` |
 | `.claude/agents/` contains real `.md` files | Existing agents | Migrate to `.orqa/process/agents/` |
-| `.claude/skills/` contains real dirs | Existing skills | Migrate to `.orqa/process/skills/` |
+| `.claude/skills/` contains real dirs | Existing knowledge | Migrate to `.orqa/process/knowledge/` |
 
 ### Check 3: Is the plugin already installed?
 
@@ -119,12 +119,12 @@ mkdir -p .orqa/process/agents/
 cp .claude/agents/*.md .orqa/process/agents/
 ```
 
-### Step 4: Migrate skills
+### Step 4: Migrate knowledge
 
 ```bash
-# If .claude/skills/ contains real skill directories
-mkdir -p .orqa/process/skills/
-cp -r .claude/skills/*/ .orqa/process/skills/
+# If .claude/skills/ contains real knowledge directories
+mkdir -p .orqa/process/knowledge/
+cp -r .claude/skills/*/ .orqa/process/knowledge/
 ```
 
 ### Step 5: Back up and remove originals
@@ -219,7 +219,7 @@ Restart Claude Code. The plugin's SessionStart hook will:
 1. Create `.claude/CLAUDE.md` → `.orqa/process/agents/orchestrator.md` symlink
 2. Create `.claude/rules/` → `.orqa/process/rules/` symlink
 3. Create `.claude/agents/` → `.orqa/process/agents/` symlink
-4. Create `.claude/skills/` → `.orqa/process/skills/` symlink
+4. Create `.claude/knowledge/` → `.orqa/process/knowledge/` symlink
 5. Run session health checks (stashes, worktrees, uncommitted files)
 
 ## Fresh Install Path (no existing `.claude/`)
@@ -236,7 +236,7 @@ Restart Claude Code. The plugin's SessionStart hook will:
 | PreToolUse hook | `hooks/hooks.json` | Rule enforcement via pattern matching |
 | SessionStart hook | `hooks/hooks.json` | Symlink setup + session health checks |
 | Stop hook | `hooks/hooks.json` | Pre-commit checklist reminders |
-| Rule enforcement skill | `skills/rule-enforcement/` | Documents how enforcement works |
+| Rule enforcement knowledge | `knowledge/rule-enforcement/` | Documents how enforcement works |
 | `/orqa` command | `commands/orqa.md` | Governance summary |
 
 ## What Stays in `.claude/`
@@ -251,7 +251,7 @@ After installation, `.claude/` contains only:
 | `rules/` | Symlink | → `.orqa/process/rules/` |
 | `agents/` | Symlink | → `.orqa/process/agents/` |
 
-Skills are NOT symlinked — they come through the plugin's `skills/` directory as Claude Code-native skills. Everything in `.orqa/` is the source of truth. The symlinks are managed by the plugin.
+Domain knowledge is accessed via the `knowledge/` directory in the connector plugin. Claude Code-native skills (for the `Skill()` tool) come through the plugin's `skills/` directory. Everything in `.orqa/` is the source of truth. The symlinks are managed by the plugin.
 
 ## Platform Notes
 

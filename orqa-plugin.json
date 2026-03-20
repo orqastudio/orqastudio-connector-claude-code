@@ -25,35 +25,35 @@
         "args": ["mcp"]
       }
     },
-    "skills": [
+    "knowledge": [
       {
         "key": "plugin-setup",
-        "id": "SKILL-CC-5ebf82dc",
+        "id": "KNOW-CC-5ebf82dc",
         "label": "OrqaStudio Plugin Setup"
       },
       {
         "key": "rule-enforcement",
-        "id": "SKILL-bcfeb64e",
+        "id": "KNOW-bcfeb64e",
         "label": "Rule Enforcement (CLI Plugin)"
       },
       {
         "key": "delegation-patterns",
-        "id": "SKILL-CC-002",
+        "id": "KNOW-CC-002",
         "label": "Agent Delegation Patterns"
       },
       {
         "key": "governance-context",
-        "id": "SKILL-CC-003",
+        "id": "KNOW-CC-003",
         "label": "Governance Context"
       },
       {
         "key": "artifact-creation",
-        "id": "SKILL-CC-004",
+        "id": "KNOW-CC-004",
         "label": "Artifact Creation"
       },
       {
         "key": "artifact-ids",
-        "id": "SKILL-CC-005",
+        "id": "KNOW-CC-005",
         "label": "Artifact ID Format & Generation"
       }
     ],
@@ -68,7 +68,7 @@
       },
       {
         "event": "SessionStart",
-        "description": "Symlink setup, health checks, delegation reminders"
+        "description": "Health checks, session recovery, delegation reminders"
       },
       {
         "event": "Stop",

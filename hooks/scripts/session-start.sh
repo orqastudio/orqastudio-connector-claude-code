@@ -1,110 +1,13 @@
 #!/usr/bin/env bash
 # OrqaStudio plugin — SessionStart hook
-# Sets up .claude/ symlinks and runs session health checks
+# Runs session health checks and recovers previous session state.
+# Symlinks (.claude/agents, .claude/rules) and server configs (.mcp.json, .lsp.json)
+# are created at install time by `orqa plugin install`. This hook does NOT regenerate them.
 
 set -euo pipefail
 
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
 ORQA_DIR="$PROJECT_DIR/.orqa"
-CLAUDE_DIR="$PROJECT_DIR/.claude"
-
-# ─── Symlink Setup ───────────────────────────────────────────────────────────
-# The plugin manages all .claude/ symlinks. .orqa/ is the single source of truth.
-# These symlinks are required by Claude Code's native discovery:
-#   CLAUDE.md  — project instructions (from orchestrator agent)
-#   rules/     — rules loaded as system context
-#   agents/    — agent definitions for subagent delegation
-#   skills/    — skill definitions for /skill commands
-
-create_symlink() {
-  local link="$1"
-  local target="$2"
-
-  # Detect OS for symlink creation
-  if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "mingw"* || "$OSTYPE" == "cygwin" ]]; then
-    # Windows — use PowerShell for proper NTFS symlinks
-    local win_link
-    local win_target
-    win_link=$(cygpath -w "$link" 2>/dev/null || echo "$link")
-    win_target=$(cygpath -w "$target" 2>/dev/null || echo "$target")
-
-    if [ -d "$target" ]; then
-      powershell -Command "New-Item -ItemType SymbolicLink -Path '$win_link' -Target '$win_target' -Force" > /dev/null 2>&1
-    else
-      powershell -Command "New-Item -ItemType SymbolicLink -Path '$win_link' -Target '$win_target' -Force" > /dev/null 2>&1
-    fi
-  else
-    # Unix — standard ln -sfn
-    ln -sfn "$target" "$link"
-  fi
-}
-
-setup_symlink() {
-  local link="$1"
-  local target="$2"
-
-  # Skip if .orqa/ source doesn't exist
-  if [ ! -e "$target" ]; then
-    return
-  fi
-
-  # Already a correct symlink
-  if [ -L "$link" ]; then
-    return
-  fi
-
-  # Real file/dir exists — don't overwrite
-  if [ -e "$link" ]; then
-    return
-  fi
-
-  create_symlink "$link" "$target"
-}
-
-if [ -d "$ORQA_DIR" ]; then
-  mkdir -p "$CLAUDE_DIR"
-
-  # .claude/ symlinks — required by Claude Code's native discovery
-  # CLAUDE.md → orchestrator agent definition (project instructions)
-  # rules/ → governance rules with enforcement arrays
-  # agents/ → agent definitions for subagent delegation
-  # NOTE: skills/ is NOT symlinked — skills come through the plugin's skills/
-  # directory and are curated for the Claude Code context, not raw OrqaStudio artifacts
-  setup_symlink "$CLAUDE_DIR/CLAUDE.md" "$ORQA_DIR/process/agents/orchestrator.md"
-  setup_symlink "$CLAUDE_DIR/rules"     "$ORQA_DIR/process/rules"
-  setup_symlink "$CLAUDE_DIR/agents"    "$ORQA_DIR/process/agents"
-fi
-
-# ─── Plugin Skill Registration ───────────────────────────────────────────────
-# Register plugin skills in .orqa/process/skills/ so they're discoverable by
-# the artifact scanner and browsable in the app. Plugin skills have layer: plugin.
-# NOTE: Claude Code discovers skills natively via the plugin's skills/ directory.
-# This symlink is for the OrqaStudio app's artifact scanner only.
-PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-}"
-
-if [ -n "$PLUGIN_ROOT" ] && [ -d "$PLUGIN_ROOT/skills" ] && [ -d "$ORQA_DIR/process/skills" ]; then
-  for skill_dir in "$PLUGIN_ROOT"/skills/*/; do
-    [ -d "$skill_dir" ] || continue
-    skill_name=$(basename "$skill_dir")
-    target_dir="$ORQA_DIR/process/skills/$skill_name"
-    setup_symlink "$target_dir" "$skill_dir"
-  done
-fi
-
-# ─── Skill Sync ──────────────────────────────────────────────────────────────
-# Sync OrqaStudio skills to Claude Code format in the plugin's skills/ directory.
-if [ -n "$PLUGIN_ROOT" ] && [ -f "$PLUGIN_ROOT/hooks/scripts/sync-skills.mjs" ]; then
-  CLAUDE_PROJECT_DIR="$PROJECT_DIR" CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" \
-    node "$PLUGIN_ROOT/hooks/scripts/sync-skills.mjs" 2>/dev/null || true
-fi
-
-# ─── Server Sync ─────────────────────────────────────────────────────────────
-# Aggregate LSP/MCP server declarations from all installed plugins into
-# .lsp.json and .mcp.json (AD-059: central registration via manifests).
-if [ -n "$PLUGIN_ROOT" ] && [ -f "$PLUGIN_ROOT/hooks/scripts/sync-servers.mjs" ]; then
-  CLAUDE_PROJECT_DIR="$PROJECT_DIR" CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" \
-    node "$PLUGIN_ROOT/hooks/scripts/sync-servers.mjs" 2>/dev/null || true
-fi
 
 # ─── Session Guard ───────────────────────────────────────────────────────────
 # Only run health checks once per session
@@ -195,7 +98,7 @@ OUTPUT="${OUTPUT}4. Before stopping: write session state to tmp/session-state.md
 OUTPUT="${OUTPUT}ORCHESTRATOR REMINDERS:\n"
 OUTPUT="${OUTPUT}- You coordinate. You do NOT implement. Delegate to specialized agents.\n"
 OUTPUT="${OUTPUT}- Universal roles: researcher, planner, implementer, reviewer, writer, designer, governance-steward\n"
-OUTPUT="${OUTPUT}- Roles are specialised via skills at runtime\n\n"
+OUTPUT="${OUTPUT}- Roles are specialised via knowledge at runtime\n\n"
 
 OUTPUT="${OUTPUT}SESSION START CHECKLIST:\n"
 OUTPUT="${OUTPUT}- Check .orqa/delivery/tasks/ for active tasks\n"

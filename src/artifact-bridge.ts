@@ -5,7 +5,6 @@
  * - CLAUDE.md → .orqa/process/agents/orchestrator.md (the orchestrator agent)
  * - rules/   → .orqa/process/rules/ (governance rules with enforcement YAML)
  * - agents/  → .orqa/process/agents/ (all agent definitions)
- * - skills/  → .orqa/process/skills/ (contextual skill definitions)
  *
  * This bridge:
  * 1. Creates/maintains the symlinks on session start
@@ -48,12 +47,6 @@ const BRIDGE_MAPPINGS: BridgeMapping[] = [
 		orqaPath: ".orqa/process/agents",
 		isDirectory: true,
 		description: "Agent role definitions (orchestrator, planner, implementer, etc.)",
-	},
-	{
-		claudePath: "skills",
-		orqaPath: ".orqa/process/skills",
-		isDirectory: true,
-		description: "Contextual skill definitions for prompt injection",
 	},
 ];
 

@@ -4,9 +4,9 @@
  * This is the TypeScript equivalent of the prompt-injector.mjs hook script,
  * extracted for reuse by other consumers.
  *
- * Skills are markdown artifacts in .orqa/process/skills/<name>.md.
- * The injector maps user intent keywords to skill names, deduplicates
- * across a session, and returns the skill content for prompt injection.
+ * Knowledge files are markdown artifacts in .orqa/process/knowledge/<name>/KNOW.md.
+ * The injector maps user intent keywords to knowledge names, deduplicates
+ * across a session, and returns the knowledge content for prompt injection.
  */
 
 import * as fs from "node:fs";
@@ -22,8 +22,8 @@ export interface InjectionResult {
 	content: string;
 }
 
-/** Default intent → skill mappings. Can be extended by plugins.
- *  Skill names must match directory names under .orqa/process/skills/ or app/.orqa/process/skills/. */
+/** Default intent → knowledge mappings. Can be extended by plugins.
+ *  Knowledge names must match directory names under .orqa/process/knowledge/ or app/.orqa/process/knowledge/. */
 const DEFAULT_INTENT_MAP: IntentMapping[] = [
 	{ keywords: ["ipc", "invoke", "tauri", "command"], skills: ["orqa-ipc-patterns", "orqa-error-composition"] },
 	{ keywords: ["store", "state", "svelte-store", "reactive", "rune"], skills: ["orqa-store-patterns", "orqa-store-orchestration"] },
@@ -88,7 +88,7 @@ export class PromptInjector {
 		const injected: string[] = [];
 
 		for (const skillName of matchedSkills) {
-			const content = this.loadSkillContent(skillName);
+			const content = this.loadKnowledgeContent(skillName);
 			if (content) {
 				contents.push(content);
 				injected.push(skillName);
@@ -124,14 +124,19 @@ export class PromptInjector {
 	// Private helpers
 	// -----------------------------------------------------------------------
 
-	private loadSkillContent(skillName: string): string | null {
-		const skillPaths = [
-			path.join(this.projectRoot, ".orqa", "process", "skills", `${skillName}.md`),
+	private loadKnowledgeContent(skillName: string): string | null {
+		const candidates = [
+			// Project-level knowledge (primary)
+			path.join(this.projectRoot, ".orqa", "process", "knowledge", skillName, "KNOW.md"),
+			path.join(this.projectRoot, ".orqa", "process", "knowledge", `${skillName}.md`),
+			// App-level knowledge (monorepo)
+			path.join(this.projectRoot, "app", ".orqa", "process", "knowledge", skillName, "KNOW.md"),
+			path.join(this.projectRoot, "app", ".orqa", "process", "knowledge", `${skillName}.md`),
 		];
 
-		for (const skillPath of skillPaths) {
-			if (fs.existsSync(skillPath)) {
-				const content = fs.readFileSync(skillPath, "utf-8");
+		for (const candidatePath of candidates) {
+			if (fs.existsSync(candidatePath)) {
+				const content = fs.readFileSync(candidatePath, "utf-8");
 				// Strip YAML frontmatter before injecting
 				return content.replace(/^---\n[\s\S]*?\n---\n/, "").trim();
 			}

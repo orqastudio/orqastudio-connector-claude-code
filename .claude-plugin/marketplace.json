@@ -1,10 +1,16 @@
 {
+  "name": "orqa-local",
+  "metadata": {
+    "description": "Local OrqaStudio plugin marketplace"
+  },
+  "owner": {
+    "name": "OrqaStudio"
+  },
   "plugins": [
     {
-      "name": "orqastudio-governance",
-      "version": "0.1.0-dev",
-      "description": "OrqaStudio governance integration — agent delegation, rule enforcement, skill injection, MCP/LSP servers.",
-      "path": ".."
+      "name": "orqastudio",
+      "source": "./",
+      "description": "OrqaStudio governance integration — agent delegation, rule enforcement, skill injection, MCP/LSP servers."
     }
   ]
 }
