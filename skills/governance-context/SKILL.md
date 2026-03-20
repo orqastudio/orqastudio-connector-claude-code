@@ -76,3 +76,23 @@ From `core.json`:
 - `grounded`/`grounded-by` only TO pillar
 - `drives`/`driven-by` only FROM decision
 - `observes`/`observed-by` only FROM agent
+
+## MCP Skill Discovery
+
+When you need domain knowledge beyond what's preloaded, query the MCP server:
+
+```
+# Find skills by keyword
+graph_query({ type: "skill", search: "composability" })
+
+# Search only governance artifacts
+graph_query({ type: "skill", search: "testing", scope: "artifacts" })
+
+# Read a skill's full content
+graph_read({ path: ".orqa/process/skills/search.md" })
+
+# Get a skill's relationships (which agents use it)
+graph_relationships({ id: "SKILL-f0c40eaf" })
+```
+
+Use `scope: "artifacts"` to search only `.orqa/` content. Use `scope: "codebase"` for source code.

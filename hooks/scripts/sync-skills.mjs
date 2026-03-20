@@ -59,38 +59,64 @@ const NATIVE_SKILLS = new Set([
   "rule-enforcement",
 ]);
 
-// Proactive skills — synced because agents need them BEFORE acting.
-// Everything else is available via MCP on demand (graph_query + graph_read).
-const PROACTIVE_SKILLS = new Set([
-  // Agent preloads (from agent skills: frontmatter)
-  "composability",
-  "centralized-logging",
-  // Coding standards
-  "svelte5-best-practices",
-  "tailwind-design-system",
-  "rust-async-patterns",
-  "typescript-advanced-types",
-  "orqa-frontend-best-practices",
-  "orqa-backend-best-practices",
-  // Intent-mapped skills (from prompt-injector INTENT_MAP)
-  "orqa-ipc-patterns",
-  "orqa-error-composition",
-  "orqa-store-patterns",
-  "orqa-store-orchestration",
-  "orqa-domain-services",
-  "orqa-repository-pattern",
-  "orqa-streaming",
-  "planning",
-  "systems-thinking",
-  "orqa-governance",
-  "orqa-documentation",
-  "diagnostic-methodology",
-  "orqa-testing",
-  "orqa-code-search",
-  "restructuring-methodology",
-  // Search
-  "search",
-]);
+/**
+ * Dynamically discover which skills should be proactively synced.
+ *
+ * A skill is proactive if ANY of:
+ * 1. Its frontmatter has `user-invocable: true`
+ * 2. It's referenced in a connector agent's `skills:` field
+ * 3. It's in the prompt-injector INTENT_MAP
+ *
+ * This replaces the old hardcoded PROACTIVE_SKILLS set.
+ */
+function discoverProactiveSkills() {
+  const proactive = new Set();
+
+  // 1. Read agent skill references from connector agents
+  const agentsDir = join(PLUGIN_ROOT, "agents");
+  if (existsSync(agentsDir)) {
+    for (const file of readdirSync(agentsDir)) {
+      if (!file.endsWith(".md")) continue;
+      const content = readFileSync(join(agentsDir, file), "utf-8");
+      const skillsMatch = content.match(/^skills:\s*\n((?:\s+-\s+.+\n?)+)/m);
+      if (skillsMatch) {
+        for (const line of skillsMatch[1].split("\n")) {
+          const m = line.match(/^\s+-\s+(.+)/);
+          if (m) proactive.add(m[1].trim());
+        }
+      }
+    }
+  }
+
+  // 2. Read intent-mapped skills from prompt-injector
+  const injectorPath = join(PLUGIN_ROOT, "hooks", "scripts", "prompt-injector.mjs");
+  if (existsSync(injectorPath)) {
+    const content = readFileSync(injectorPath, "utf-8");
+    const skillMatches = content.matchAll(/skills:\s*\[([^\]]+)\]/g);
+    for (const match of skillMatches) {
+      for (const skill of match[1].split(",")) {
+        const cleaned = skill.trim().replace(/^["']|["']$/g, "");
+        if (cleaned) proactive.add(cleaned);
+      }
+    }
+  }
+
+  // 3. Scan source skills for user-invocable: true
+  for (const sourceDir of SKILL_SOURCES) {
+    if (!existsSync(sourceDir)) continue;
+    for (const file of readdirSync(sourceDir)) {
+      if (!file.endsWith(".md")) continue;
+      const content = readFileSync(join(sourceDir, file), "utf-8");
+      if (content.includes("user-invocable: true")) {
+        proactive.add(file.replace(".md", ""));
+      }
+    }
+  }
+
+  return proactive;
+}
+
+const PROACTIVE_SKILLS = discoverProactiveSkills();
 
 /**
  * Strip OrqaStudio YAML frontmatter and return Claude Code-compatible frontmatter + body.
