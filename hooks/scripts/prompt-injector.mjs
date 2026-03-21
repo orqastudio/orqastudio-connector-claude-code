@@ -106,6 +106,7 @@ function getAgentPreamble(agentType, projectDir) {
 
 const MODE_TEMPLATES = {
   "implementation": "Mode: implementation. Search domain knowledge before writing code. Four-layer rule (RULE-010) applies. No stubs.",
+  "dogfood-implementation": "Mode: dogfood-implementation. You are building infrastructure for immediate use in this project. Search aggressively for existing patterns — reuse over rebuild. Four-layer rule (RULE-010) applies. For Rust changes: offer to run make restart-tauri. For sidecar: warn before modifying protocol. Do not edit conversation components mid-stream.",
   "research": "Mode: research. Produce findings, not changes. Use search_semantic + graph_query. Cross-reference before concluding.",
   "learning-loop": "Mode: learning-loop. Capture as lesson artifact first. Check for recurrence — promote to rule if pattern repeats. Do not treat as implementation request.",
   "planning": "Mode: planning. Scope against the graph. Check dependencies. Design approach before delegating. Produce a plan, not code.",
