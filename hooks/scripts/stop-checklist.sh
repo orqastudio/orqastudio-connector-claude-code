@@ -165,7 +165,7 @@ if command -v orqa >/dev/null 2>&1; then
     done || true)
 
     if [ -n "$INCOMPLETE" ]; then
-      EPIC_REMINDER="EPIC NOT COMPLETE — $SCOPED_EPIC has incomplete tasks (RULE-046: keep working until done):\n${INCOMPLETE}\n\nDo not stop unless the user explicitly asks you to. Start working on these tasks IMMEDIATELY — do not wait for the next session.\n\n"
+      EPIC_REMINDER="EPIC NOT COMPLETE — $SCOPED_EPIC has incomplete tasks (RULE-046):\n${INCOMPLETE}\n\nRESUME WORKING NOW. Do not stop. Do not wait for the next session. Continue with the next incomplete task immediately.\n\nPRIORITY: Lesson promotions (recurrence >= 2) and rule violations are CRITICAL — always address before delivery tasks. The learning loop breaks if governance debt accumulates.\n\n"
     else
       EPIC_REMINDER="EPIC COMPLETE — $SCOPED_EPIC: all tasks completed. Summarise the work done before ending.\n\n"
     fi
