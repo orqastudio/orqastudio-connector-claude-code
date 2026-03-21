@@ -697,39 +697,87 @@ async function main() {
 
   const parts = [];
 
-  // ── Layer 1: Decision tree pointer (concise — agent reads on demand) ─────
-  // Instead of injecting the full tree body (~180 tokens every prompt),
-  // inject a one-line pointer. The agent reads the tree file when it needs
-  // to classify. The tree is already referenced in the agent's employs
-  // relationships and knowledge frontmatter.
-  const treeName = treeNameForAgent(agentType);
-  const decisionTreeInjected = true;
-  parts.push(
-    `Before acting, classify this prompt using your reasoning protocol (knowledge/${treeName}/KNOW.md). If learning loop signal detected, capture as lesson before acting.`
-  );
+  // ── Step 1: Classify thinking mode via ONNX embeddings ───────────────────
+  // Embed the user's prompt and search against thinking mode descriptions
+  // (knowledge artifacts + plugin branch descriptions). The best semantic
+  // match determines the thinking mode. No keywords — the ONNX model does
+  // the understanding.
+  //
+  // Fallback: if MCP/search unavailable, use simple keyword heuristics.
+  let thinkingMode = "unknown";
+  let modeSource = "fallback";
+  let modeDetail = "";
 
-  // ── Layer 2: Knowledge name suggestions (semantic search enhancement) ────
-  // If the search server is available, run search_semantic against the prompt
-  // and surface the top 3 knowledge file NAMES as suggestions. These are
-  // names only — the agent resolves and reads them via search_semantic.
-  // Tertiary fallback: INTENT_MAP keyword matching (marked for removal).
-  const { skillNames, source: suggestionSource } = resolveKnowledgeSuggestions(userMessage, projectDir);
-  if (skillNames.length > 0) {
-    const suggestionBlock = [
-      "[Suggested Knowledge]",
-      "Based on your prompt, these knowledge files may be relevant:",
-      ...skillNames.map((name) => `- ${name}`),
-    ].join("\n");
-    parts.push(suggestionBlock);
+  const searchResult = searchKnowledge(userMessage, projectDir);
+  if (searchResult && searchResult.length > 0) {
+    // The top search hit against the knowledge corpus tells us what domain
+    // the prompt is about. Extract the thinking mode from the match.
+    const topHit = searchResult[0];
+    const hitPath = (topHit.path || topHit.file || "").toLowerCase();
+
+    if (hitPath.includes("decision-tree") || hitPath.includes("delegation")) {
+      thinkingMode = "delegation";
+    } else if (hitPath.includes("diagnostic") || hitPath.includes("debug")) {
+      thinkingMode = "debugging";
+    } else if (hitPath.includes("research") || hitPath.includes("investigation")) {
+      thinkingMode = "research";
+    } else if (hitPath.includes("planning") || hitPath.includes("epic-requirement")) {
+      thinkingMode = "planning";
+    } else if (hitPath.includes("governance") || hitPath.includes("artifact-creation")) {
+      thinkingMode = "governance";
+    } else if (hitPath.includes("lesson") || hitPath.includes("learning")) {
+      thinkingMode = "learning-loop";
+    } else if (hitPath.includes("review") || hitPath.includes("quality")) {
+      thinkingMode = "review";
+    } else {
+      thinkingMode = "implementation";
+    }
+    modeSource = "semantic";
+    modeDetail = topHit.title || topHit.path || "";
+  } else {
+    // Fallback: keyword heuristics (fast, no server needed)
+    const lc = userMessage.toLowerCase();
+    if (/\b(i noticed|remember this|we should always|that approach caused|for next time|doesn.t happen again)\b/.test(lc)) {
+      thinkingMode = "learning-loop";
+    } else if (/\b(investigate|explore|compare|understand|audit)\b/.test(lc)) {
+      thinkingMode = "research";
+    } else if (/\b(plan|scope|prioriti[sz]e|break down|design approach)\b/.test(lc)) {
+      thinkingMode = "planning";
+    } else if (/\b(broken|failing|wrong|not working|why is|debug|diagnose)\b/.test(lc)) {
+      thinkingMode = "debugging";
+    } else if (/\b(check|review|validate|does this meet)\b/.test(lc)) {
+      thinkingMode = "review";
+    } else if (/\b(document|write docs|update docs)\b/.test(lc)) {
+      thinkingMode = "documentation";
+    } else if (/\b(build|add|create|implement|fix|refactor)\b/.test(lc)) {
+      thinkingMode = "implementation";
+    }
+    modeSource = "keyword";
   }
 
-  // ── Layer 3: Context reminder (always injected) ──────────────────────────
-  // Project variables resolved inline (project name, dogfood status, plugins).
+  // ── Step 2: Inject concise mode + search reminder ────────────────────────
+  // The model gets: what mode this is, how to find knowledge, and project context.
+  // Total: ~40-60 tokens.
+  const modeLabel = thinkingMode.replace("-", " ");
+  let injection = `Thinking mode: ${modeLabel}.`;
+
+  if (thinkingMode === "learning-loop") {
+    injection += " This is a learning loop input — capture as lesson before acting. Search for similar lessons to detect patterns.";
+  } else {
+    injection += ` Use search_semantic(scope: artifacts) to find applicable knowledge for this ${modeLabel} task.`;
+  }
+
+  parts.push(injection);
+
+  // ── Step 3: Context reminder (concise project context) ───────────────────
   const reminder = readContextReminder(projectDir);
   const reminderInjected = reminder.length > 0;
   if (reminder) {
     parts.push(reminder);
   }
+
+  const suggestionSource = modeSource;
+  const decisionTreeInjected = true;
 
   if (parts.length === 0) {
     logTelemetry("prompt-injector", "UserPromptSubmit", startTime, "skipped", {
