@@ -126,6 +126,42 @@ except Exception:
   fi
 fi
 
+# ─── Escalation Check ─────────────────────────────────────────────────────────
+# Scan lessons for escalation candidates (recurrence >= 2 unpromoted, recurrence >= 3 needing
+# enforcement strengthening). Findings are surfaced as warnings — not blocking.
+
+ESCALATION_OUTPUT=""
+if command -v orqa >/dev/null 2>&1; then
+  ESCALATION_RESULT=$(orqa audit escalation --json 2>/dev/null || true)
+  if [ -n "$ESCALATION_RESULT" ]; then
+    FINDING_COUNT=$(echo "$ESCALATION_RESULT" | python3 -c "
+import json, sys
+try:
+    data = json.load(sys.stdin)
+    findings = data.get('findings') or []
+    print(len(findings))
+except Exception:
+    print(0)
+" 2>/dev/null || echo "0")
+
+    if [ "$FINDING_COUNT" -gt 0 ]; then
+      ESCALATION_DETAILS=$(echo "$ESCALATION_RESULT" | python3 -c "
+import json, sys
+try:
+    data = json.load(sys.stdin)
+    findings = data.get('findings') or []
+    for f in findings:
+        tag = '[PROMOTE]' if f.get('reason') == 'promote' else '[STRENGTHEN]'
+        print(f'  {tag} {f[\"lessonId\"]} recurrence={f[\"recurrence\"]} status={f[\"status\"]}')
+        print(f'    {f[\"description\"]}')
+except Exception:
+    pass
+" 2>/dev/null || true)
+      OUTPUT="${OUTPUT}ESCALATION CANDIDATES (${FINDING_COUNT}): Lessons need promotion or enforcement strengthening.\n${ESCALATION_DETAILS}\n\nRun: orqa audit escalation --create-tasks to auto-create CRITICAL task artifacts.\n\n"
+    fi
+  fi
+fi
+
 # ─── Pre-Stop Output ──────────────────────────────────────────────────────────
 
 # Check for open worktrees
