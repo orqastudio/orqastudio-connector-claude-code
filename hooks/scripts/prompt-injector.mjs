@@ -697,29 +697,16 @@ async function main() {
 
   const parts = [];
 
-  // ── Layer 1: Decision tree (always injected, agent-specific) ─────────────
-  // The decision tree is the primary injection. Each agent role has its own
-  // reasoning protocol: orchestrator (decision-tree), implementer
-  // (implementer-tree), reviewer (reviewer-tree). Other agents fall back to
-  // the base decision-tree.
-  const decisionTree = readDecisionTree(agentType);
-  const decisionTreeInjected = decisionTree !== null;
-  if (decisionTree) {
-    let treeContent = `[Decision Tree — ${agentType}]\n${decisionTree}`;
-
-    // Merge plugin-contributed domain branches into the tree for implementer
-    // and orchestrator agents (they need domain awareness). Reviewers and
-    // researchers don't need domain branches — they work from standards.
-    if (agentType === "orchestrator" || agentType === "implementer" || agentType === "default") {
-      const pluginBranches = readPluginDecisionBranches(projectDir);
-      const branchBlock = formatPluginBranches(pluginBranches);
-      if (branchBlock) {
-        treeContent += `\n\n${branchBlock}`;
-      }
-    }
-
-    parts.push(treeContent);
-  }
+  // ── Layer 1: Decision tree pointer (concise — agent reads on demand) ─────
+  // Instead of injecting the full tree body (~180 tokens every prompt),
+  // inject a one-line pointer. The agent reads the tree file when it needs
+  // to classify. The tree is already referenced in the agent's employs
+  // relationships and knowledge frontmatter.
+  const treeName = treeNameForAgent(agentType);
+  const decisionTreeInjected = true;
+  parts.push(
+    `Before acting, classify this prompt using your reasoning protocol (knowledge/${treeName}/KNOW.md). If learning loop signal detected, capture as lesson before acting.`
+  );
 
   // ── Layer 2: Knowledge name suggestions (semantic search enhancement) ────
   // If the search server is available, run search_semantic against the prompt
