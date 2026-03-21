@@ -8,7 +8,7 @@
 // Replaces the static context-reminder.md that Claude Code would auto-inject.
 // Used by UserPromptSubmit hook. Reads hook input from stdin.
 
-import { readFileSync, existsSync, statSync } from "fs";
+import { readFileSync, readdirSync, existsSync, statSync } from "fs";
 import { join } from "path";
 import { spawnSync } from "node:child_process";
 import { parse as parseYaml } from "yaml";
@@ -119,9 +119,6 @@ const MODE_TEMPLATES = {
 // These enforce rules that were removed from the orchestrator system prompt when it
 // was cleaned to be generic. Without these, behavioral rules have no enforcement.
 const BEHAVIORAL_RULES = "For every new artifact or insight: trace to all usage contexts (milestones, rules, pillars, epics) before moving on. Never offer to stop or wrap up — keep working until the user says stop. Use agent teams (TeamCreate) for multi-step work — understand task dependencies before delegating. When an epic is scoped: sync session state steps and task list with the epic's tasks — work against the epic's defined tasks, not ad-hoc. When the user says 'now', 'immediately', or 'straight away' — act in the CURRENT turn, do not queue or defer. For process learnings and feedback: create lesson artifacts in .orqa/process/lessons/ instead of auto-memory files. Use auto-memory only for user-specific preferences (user type) and external references (reference type).";
-
-const FALLBACK_CLASSIFICATION_PROMPT =
-  `Classify this prompt before responding: implementation | research | learning-loop | planning | review | debugging | documentation. If learning-loop: capture as lesson first. Then proceed with the appropriate approach. ${BEHAVIORAL_RULES}`;
 
 // ---------------------------------------------------------------------------
 // Semantic search via MCP server
@@ -351,6 +348,105 @@ function checkSessionState(projectDir) {
 }
 
 // ---------------------------------------------------------------------------
+// Injector config (plugin hook contributions)
+// ---------------------------------------------------------------------------
+
+// Read .orqa/connectors/claude-code/injector-config.json if present.
+// Falls back to live scan of plugin manifests if the file is absent.
+// Returns null if nothing is available.
+function loadInjectorConfig(projectDir) {
+  // Primary: pre-generated config file.
+  const configPath = join(projectDir, ".orqa", "connectors", "claude-code", "injector-config.json");
+  if (existsSync(configPath)) {
+    try {
+      const raw = readFileSync(configPath, "utf-8");
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object") {
+        return parsed;
+      }
+    } catch {
+      // Fall through to live scan.
+    }
+  }
+
+  // Fallback: scan plugin manifests live.
+  return scanPluginManifestsLive(projectDir);
+}
+
+// Scan plugins/ and connectors/ for behavioral_rules, mode_templates,
+// and session_reminders without requiring the pre-generated config.
+function scanPluginManifestsLive(projectDir) {
+  const allBehavioralRules = [];
+  const mergedModeTemplates = {};
+  const allSessionReminders = [];
+
+  const scanDirs = [
+    join(projectDir, "plugins"),
+    join(projectDir, "connectors"),
+  ];
+
+  for (const dir of scanDirs) {
+    if (!existsSync(dir)) continue;
+
+    let entries;
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+
+    // Sort alphabetically — first declaration wins for mode_templates.
+    entries.sort((a, b) => a.name.localeCompare(b.name));
+
+    for (const entry of entries) {
+      if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
+
+      const manifestPath = join(dir, entry.name, "orqa-plugin.json");
+      if (!existsSync(manifestPath)) continue;
+
+      let manifest;
+      try {
+        manifest = JSON.parse(readFileSync(manifestPath, "utf-8"));
+      } catch {
+        continue;
+      }
+
+      const provides = manifest?.provides;
+      if (!provides) continue;
+
+      if (Array.isArray(provides.behavioral_rules)) {
+        allBehavioralRules.push(...provides.behavioral_rules);
+      }
+
+      if (provides.mode_templates && typeof provides.mode_templates === "object") {
+        for (const [key, value] of Object.entries(provides.mode_templates)) {
+          if (!(key in mergedModeTemplates)) {
+            mergedModeTemplates[key] = value;
+          }
+        }
+      }
+
+      if (Array.isArray(provides.session_reminders)) {
+        allSessionReminders.push(...provides.session_reminders);
+      }
+    }
+  }
+
+  const hasContent =
+    allBehavioralRules.length > 0 ||
+    Object.keys(mergedModeTemplates).length > 0 ||
+    allSessionReminders.length > 0;
+
+  if (!hasContent) return null;
+
+  return {
+    behavioral_rules: allBehavioralRules.join(" "),
+    mode_templates: mergedModeTemplates,
+    session_reminders: allSessionReminders.join(" "),
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
 
@@ -378,27 +474,47 @@ async function main() {
 
   const agentType = detectAgentType(hookInput);
 
-  // Step 1: Classify thinking mode via ONNX semantic search.
-  const { mode, source } = classifyThinkingMode(userMessage, projectDir);
+  // Step 1: Load plugin hook contributions.
+  const injectorConfig = loadInjectorConfig(projectDir);
 
-  // Step 2: Build role preamble from .orqa agent definition (replaces static context-reminder.md).
-  const preamble = getAgentPreamble(agentType, projectDir);
-
-  // Step 3: Build mode injection (mode template + behavioral rules).
-  let modeInjection;
-  if (mode && MODE_TEMPLATES[mode]) {
-    modeInjection = `${MODE_TEMPLATES[mode]} ${BEHAVIORAL_RULES}`;
-  } else {
-    modeInjection = FALLBACK_CLASSIFICATION_PROMPT;
+  // Merge behavioral rules (plugin contributions appended after built-ins).
+  let behavioralRules = BEHAVIORAL_RULES;
+  if (injectorConfig?.behavioral_rules) {
+    behavioralRules = `${BEHAVIORAL_RULES} ${injectorConfig.behavioral_rules}`;
   }
 
-  // Step 4: Append concise context line.
+  // Merge mode templates (built-ins win on collision).
+  let modeTemplates = { ...MODE_TEMPLATES };
+  if (injectorConfig?.mode_templates && typeof injectorConfig.mode_templates === "object") {
+    modeTemplates = { ...injectorConfig.mode_templates, ...MODE_TEMPLATES };
+  }
+
+  // Build session constant with plugin contributions appended.
+  const sessionConstantBase = "Remember: tmp/session-state.md is your working document. It MUST include the scoped epic (EPIC-XXXXXXXX) so the stop hook can check completion. When an epic is scoped, sync session state steps AND task list with the epic's artifact tasks — work against the epic's defined tasks, not ad-hoc. Update session state when scope changes, decisions are made, or steps complete.";
+  let sessionConstant = sessionConstantBase;
+  if (injectorConfig?.session_reminders) {
+    sessionConstant = `${sessionConstantBase} ${injectorConfig.session_reminders}`;
+  }
+
+  // Step 2: Classify thinking mode via ONNX semantic search.
+  const { mode, source } = classifyThinkingMode(userMessage, projectDir);
+
+  // Step 3: Build role preamble from .orqa agent definition (replaces static context-reminder.md).
+  const preamble = getAgentPreamble(agentType, projectDir);
+
+  // Step 4: Build mode injection (mode template + behavioral rules).
+  let modeInjection;
+  if (mode && modeTemplates[mode]) {
+    modeInjection = `${modeTemplates[mode]} ${behavioralRules}`;
+  } else {
+    modeInjection = `Classify this prompt before responding: implementation | research | learning-loop | planning | review | debugging | documentation. If learning-loop: capture as lesson first. Then proceed with the appropriate approach. ${behavioralRules}`;
+  }
+
+  // Step 5: Append concise context line.
   const contextLine = getContextLine(projectDir);
 
-  // Step 5: Check session state freshness.
+  // Step 6: Check session state freshness.
   const sessionReminder = checkSessionState(projectDir);
-
-  const sessionConstant = "Remember: tmp/session-state.md is your working document. It MUST include the scoped epic (EPIC-XXXXXXXX) so the stop hook can check completion. When an epic is scoped, sync session state steps AND task list with the epic's artifact tasks — work against the epic's defined tasks, not ad-hoc. Update session state when scope changes, decisions are made, or steps complete.";
 
   let systemMessage = `${preamble}\n\n${modeInjection}\n\n${contextLine}\n\n${sessionConstant}`;
   if (sessionReminder) {
