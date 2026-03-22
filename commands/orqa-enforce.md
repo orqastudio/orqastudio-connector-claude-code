@@ -12,16 +12,16 @@ Run the OrqaStudio integrity validator against the artifact graph. This checks a
 
 ```bash
 # Full validation
-orqa validate
+orqa enforce
 
 # Validate a specific path
-orqa validate .orqa/delivery/
+orqa enforce .orqa/delivery/
 
 # Show only errors (skip warnings)
-orqa validate --errors-only
+orqa enforce --errors-only
 
 # JSON output for programmatic use
-orqa validate --json
+orqa enforce --json
 ```
 
 ## Interpreting Results

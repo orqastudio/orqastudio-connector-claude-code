@@ -124,21 +124,61 @@ function getAgentPreamble(agentType, projectDir) {
 // Mode templates
 // ---------------------------------------------------------------------------
 
-const MODE_TEMPLATES = {
-  "implementation": "Mode: implementation. Search domain knowledge before writing code. Four-layer rule (RULE-010) applies. No stubs.",
-  "dogfood-implementation": "Mode: dogfood-implementation. You are building infrastructure for immediate use in this project. Search aggressively for existing patterns — reuse over rebuild. Four-layer rule (RULE-010) applies. For Rust changes: offer to run make restart-tauri. For sidecar: warn before modifying protocol. Do not edit conversation components mid-stream.",
-  "research": "Mode: research. Produce findings, not changes. Use search_semantic + graph_query. Cross-reference before concluding.",
-  "learning-loop": "Mode: learning-loop. Capture as lesson artifact first. Check for recurrence — promote to rule if pattern repeats. Do not treat as implementation request.",
-  "planning": "Mode: planning. Scope against the graph. Check dependencies. Design approach before delegating. Produce a plan, not code.",
-  "review": "Mode: review. Evidence-based verdict against acceptance criteria. Do not fix — report findings.",
-  "debugging": "Mode: debugging. Investigate root cause first. If enforcement gap — CRITICAL priority. Use diagnostic-methodology knowledge.",
-  "documentation": "Mode: documentation. Write docs before or instead of code. Follow artifact framework schema. Documentation is source of truth.",
-};
+// Mode templates come from thinking-mode knowledge artifacts (semantic search).
+// Behavioral rules come from active rule artifacts with mechanism: behavioral entries.
+// Session reminders come from plugin manifests (provides.session_reminders).
+// Nothing is hardcoded — all governance context is artifact-driven.
 
-// Behavioral rules injected into EVERY mode (appended after mode-specific content).
-// These enforce rules that were removed from the orchestrator system prompt when it
-// was cleaned to be generic. Without these, behavioral rules have no enforcement.
-const BEHAVIORAL_RULES = "For every new artifact or insight: trace to all usage contexts (milestones, rules, pillars, epics) before moving on. Never offer to stop or wrap up — keep working until the user says stop. Use agent teams (TeamCreate) for multi-step work — understand task dependencies before delegating. When the user says 'now', 'immediately', or 'straight away' — act in the CURRENT turn, do not queue or defer.";
+/**
+ * Load behavioral rule messages from all active rule artifacts.
+ * Reads enforcement entries with mechanism: "behavioral" and extracts messages.
+ * Uses the yaml library for proper frontmatter parsing.
+ *
+ * @param {string} projectDir
+ * @returns {string} Combined behavioral rules text
+ */
+function loadBehavioralRulesFromArtifacts(projectDir) {
+  const messages = [];
+  const ruleDirs = [];
+
+  const devRules = join(projectDir, ".orqa", "process", "rules");
+  if (existsSync(devRules)) ruleDirs.push(devRules);
+
+  for (const parentDir of ["plugins", "connectors"]) {
+    const parent = join(projectDir, parentDir);
+    if (!existsSync(parent)) continue;
+    let entries;
+    try { entries = readdirSync(parent, { withFileTypes: true }); } catch { continue; }
+    for (const entry of entries) {
+      if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
+      const rulesDir = join(parent, entry.name, "rules");
+      if (existsSync(rulesDir)) ruleDirs.push(rulesDir);
+    }
+  }
+
+  for (const dir of ruleDirs) {
+    for (const file of readdirSync(dir)) {
+      if (!file.startsWith("RULE-") || !file.endsWith(".md")) continue;
+
+      let content;
+      try { content = readFileSync(join(dir, file), "utf-8"); } catch { continue; }
+
+      const fm = parseFrontmatter(content);
+      if (!fm) continue;
+      if (fm.status && fm.status !== "active") continue;
+      if (!Array.isArray(fm.enforcement)) continue;
+
+      for (const entry of fm.enforcement) {
+        if (typeof entry !== "object" || !entry) continue;
+        if (entry.mechanism === "behavioral" && entry.message) {
+          messages.push(entry.message);
+        }
+      }
+    }
+  }
+
+  return messages.join(" ");
+}
 
 // ---------------------------------------------------------------------------
 // Semantic search via MCP server
@@ -497,24 +537,15 @@ async function main() {
   // Step 1: Load plugin hook contributions.
   const injectorConfig = loadInjectorConfig(projectDir);
 
-  // Merge behavioral rules (plugin contributions appended after built-ins).
-  let behavioralRules = BEHAVIORAL_RULES;
-  if (injectorConfig?.behavioral_rules) {
-    behavioralRules = `${BEHAVIORAL_RULES} ${injectorConfig.behavioral_rules}`;
-  }
-
-  // Merge mode templates (built-ins win on collision).
-  let modeTemplates = { ...MODE_TEMPLATES };
-  if (injectorConfig?.mode_templates && typeof injectorConfig.mode_templates === "object") {
-    modeTemplates = { ...injectorConfig.mode_templates, ...MODE_TEMPLATES };
-  }
-
-  // Build session constant with plugin contributions appended.
-  const sessionConstantBase = "Remember: tmp/session-state.md is your working document. Update session state when scope changes, decisions are made, or steps complete.";
-  let sessionConstant = sessionConstantBase;
-  if (injectorConfig?.session_reminders) {
-    sessionConstant = `${sessionConstantBase} ${injectorConfig.session_reminders}`;
-  }
+  // Behavioral rules loaded from rule artifacts (mechanism: behavioral messages).
+  // Mode templates and session reminders from plugin manifests.
+  const artifactBehavioralRules = loadBehavioralRulesFromArtifacts(projectDir);
+  const pluginBehavioralRules = injectorConfig?.behavioral_rules || "";
+  const behavioralRules = [artifactBehavioralRules, pluginBehavioralRules].filter(Boolean).join(" ");
+  const modeTemplates = (injectorConfig?.mode_templates && typeof injectorConfig.mode_templates === "object")
+    ? injectorConfig.mode_templates
+    : {};
+  const sessionConstant = injectorConfig?.session_reminders || "";
 
   // Step 2: Classify thinking mode via ONNX semantic search.
   const { mode, source } = classifyThinkingMode(userMessage, projectDir);

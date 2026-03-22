@@ -86,7 +86,7 @@ These are user-invocable. They are **not** domain knowledge for auto-injection â
 ### SessionStart Hook
 
 The SessionStart hook runs health checks only:
-- Runs `orqa validate --fix` to surface graph integrity issues
+- Runs `orqa enforce --fix` to surface graph integrity issues
 - Warns on uncommitted changes, stale stashes, orphaned worktrees
 - Recovers previous session state from `tmp/session-state.md`
 

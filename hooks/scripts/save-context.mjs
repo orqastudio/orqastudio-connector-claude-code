@@ -8,26 +8,20 @@
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSync } from "fs";
 import { join } from "path";
+import { parse as parseYaml } from "yaml";
 import { logTelemetry } from "./telemetry.mjs";
 
-// Simple YAML frontmatter parser
 function parseFrontmatter(content) {
-  const match = content.match(/^---\n([\s\S]*?)\n---/);
-  if (!match) return null;
-  const yaml = match[1];
-  const result = {};
-  for (const line of yaml.split("\n")) {
-    const kvMatch = line.match(/^(\w[\w-]*)\s*:\s*(.+)$/);
-    if (kvMatch) {
-      let val = kvMatch[2].trim();
-      if (val.startsWith('"') && val.endsWith('"')) val = val.slice(1, -1);
-      result[kvMatch[1]] = val;
-    }
+  const fmEnd = content.indexOf("\n---", 4);
+  if (!content.startsWith("---\n") || fmEnd === -1) return null;
+  try {
+    return parseYaml(content.slice(4, fmEnd));
+  } catch {
+    return null;
   }
-  return result;
 }
 
-// Find active epics
+// Find active epics — queries by status (valid per plugin statusTransitions schema)
 function findActiveEpics(projectDir) {
   const epicsDir = join(projectDir, ".orqa", "delivery", "epics");
   if (!existsSync(epicsDir)) return [];
@@ -44,7 +38,7 @@ function findActiveEpics(projectDir) {
   return epics;
 }
 
-// Find in-progress tasks
+// Find in-progress tasks — queries by status (valid per plugin statusTransitions schema)
 function findActiveTasks(projectDir) {
   const tasksDir = join(projectDir, ".orqa", "delivery", "tasks");
   if (!existsSync(tasksDir)) return [];

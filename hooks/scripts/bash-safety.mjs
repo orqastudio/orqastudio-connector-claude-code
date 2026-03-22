@@ -1,168 +1,101 @@
 #!/usr/bin/env node
-// PostToolUse hook: checks Bash tool calls for dangerous command patterns.
+// PreToolUse hook: checks Bash tool calls for dangerous command patterns.
+//
+// Loads bash enforcement patterns from rule artifacts (mechanism: hook,
+// event: bash). No hardcoded patterns — all enforcement comes from rules.
 //
 // Reads hook input from stdin (JSON with tool_name, tool_input).
 // Blocked patterns: exit 2, write JSON to stderr with permissionDecision: "deny".
 // Warn patterns: exit 0, write JSON to stdout with systemMessage.
 // Safe patterns: exit 0, no output.
 
+import { readFileSync, readdirSync, existsSync } from "fs";
+import { join } from "path";
+import { parse as parseYaml } from "yaml";
 import { logTelemetry } from "./telemetry.mjs";
 
 /**
- * @typedef {{ severity: "block" | "warn", id: string, pattern: RegExp, reason: string }} SafetyRule
+ * Parse YAML frontmatter from a markdown file.
+ * @param {string} content
+ * @returns {Record<string, unknown> | null}
  */
-
-/** @type {SafetyRule[]} */
-const SAFETY_RULES = [
-  // --- BLOCK: git commit/push with --no-verify (bypasses pre-commit hooks) ---
-  {
-    severity: "block",
-    id: "bash-no-verify",
-    pattern: /git\s+(commit|push)\b[^|&;]*--no-verify/i,
-    reason:
-      "--no-verify bypasses pre-commit hooks. Fix the underlying issue instead of skipping enforcement.",
-  },
-
-  // --- BLOCK: force push to main or master ---
-  {
-    severity: "block",
-    id: "bash-force-push-main",
-    pattern: /git\s+push\b[^|&;]*(-f\b|--force\b)[^|&;]*(main|master)\b/i,
-    reason:
-      "Force pushing to main/master is forbidden. Use a feature branch and PR instead.",
-  },
-  {
-    severity: "block",
-    id: "bash-force-push-main-reversed",
-    // also catches: git push origin main --force
-    pattern: /git\s+push\b[^|&;]*(main|master)\b[^|&;]*(-f\b|--force\b)/i,
-    reason:
-      "Force pushing to main/master is forbidden. Use a feature branch and PR instead.",
-  },
-
-  // --- BLOCK: git reset --hard (destroys uncommitted work) ---
-  {
-    severity: "block",
-    id: "bash-reset-hard",
-    pattern: /git\s+reset\b[^|&;]*--hard/i,
-    reason:
-      "git reset --hard destroys uncommitted changes permanently. Use git stash or git reset --soft instead.",
-  },
-
-  // --- BLOCK: git clean -f (deletes untracked files) ---
-  {
-    severity: "block",
-    id: "bash-clean-force",
-    pattern: /git\s+clean\b[^|&;]*-[a-zA-Z]*f/i,
-    reason:
-      "git clean -f permanently deletes untracked files. Verify there is nothing important untracked first.",
-  },
-
-  // --- BLOCK: rm -rf on dangerous paths (root, home, cwd) ---
-  {
-    severity: "block",
-    id: "bash-rm-rf-root",
-    pattern: /\brm\b[^|&;]*-[a-zA-Z]*r[a-zA-Z]*f[a-zA-Z]*[^|&;]*\s+(\/|~|\.)\s*(?:$|[|&;])/i,
-    reason:
-      "rm -rf on / ~ or . is catastrophic. Specify an explicit target path.",
-  },
-  {
-    severity: "block",
-    id: "bash-rm-rf-root-flags-last",
-    // catches: rm / -rf, rm ~ -rf, rm . -rf
-    pattern: /\brm\b[^|&;]*\s+(\/|~|\.)\s+[^|&;]*-[a-zA-Z]*r[a-zA-Z]*f/i,
-    reason:
-      "rm -rf on / ~ or . is catastrophic. Specify an explicit target path.",
-  },
-
-  // --- BLOCK: sudo commands (unexpected privilege escalation) ---
-  {
-    severity: "block",
-    id: "bash-sudo",
-    pattern: /(?:^|[|&;`\s])\bsudo\b/i,
-    reason:
-      "sudo commands require explicit user approval. Run the command directly and request elevated access separately if needed.",
-  },
-
-  // --- BLOCK: eval with untrusted / variable input ---
-  {
-    severity: "block",
-    id: "bash-eval-variable",
-    pattern: /\beval\s+["']?\$[\w{(]/i,
-    reason:
-      "eval with variable input is a code-injection risk. Avoid eval or ensure input is fully controlled.",
-  },
-
-  // --- BLOCK: fork bomb pattern ---
-  {
-    severity: "block",
-    id: "bash-fork-bomb",
-    pattern: /:\s*\(\s*\)\s*\{[^}]*:\s*[|&]\s*:\s*&[^}]*\}/,
-    reason: "Fork bomb detected. This will exhaust system resources.",
-  },
-
-  // --- WARN: git push --force-with-lease (safer but still overwrites remote) ---
-  {
-    severity: "warn",
-    id: "bash-force-with-lease",
-    pattern: /git\s+push\b[^|&;]*--force-with-lease/i,
-    reason:
-      "--force-with-lease is safer than --force but still rewrites remote history. Confirm this is intentional.",
-  },
-
-  // --- WARN: rm -rf on specific non-root paths ---
-  {
-    severity: "warn",
-    id: "bash-rm-rf-path",
-    // matches rm -rf with a non-trivial path (not just / ~ or .)
-    pattern: /\brm\b[^|&;]*-[a-zA-Z]*r[a-zA-Z]*f[a-zA-Z]*[^|&;]*\s+(?!\/\s|~\s|\.\s|\/\s*$|~\s*$|\.\s*$)[^\s|&;]/i,
-    reason:
-      "rm -rf with a specific path — verify the target directory before executing.",
-  },
-
-  // --- WARN: git branch -D (force delete branch) ---
-  {
-    severity: "warn",
-    id: "bash-branch-force-delete",
-    pattern: /git\s+branch\b[^|&;]*-[a-zA-Z]*D/,
-    reason:
-      "git branch -D force-deletes a branch even if it has unmerged commits. Confirm the branch is fully merged.",
-  },
-
-  // --- WARN: git checkout -- . or git restore . (discard all working tree changes) ---
-  {
-    severity: "warn",
-    id: "bash-discard-all-changes",
-    pattern: /git\s+(?:checkout\s+--\s*\.|restore\s+\.)/i,
-    reason:
-      "This discards ALL uncommitted working tree changes. Confirm there is nothing unsaved.",
-  },
-
-  // --- WARN: SQL DROP TABLE ---
-  {
-    severity: "warn",
-    id: "bash-sql-drop-table",
-    pattern: /\bDROP\s+TABLE\b/i,
-    reason:
-      "DROP TABLE is destructive and irreversible without a backup. Confirm this is intentional.",
-  },
-
-  // --- WARN: SQL DELETE FROM without WHERE ---
-  {
-    severity: "warn",
-    id: "bash-sql-delete-no-where",
-    // DELETE FROM <table> not followed by WHERE within the same statement segment
-    pattern: /\bDELETE\s+FROM\s+\w[\w.]*(?:\s+(?!WHERE\b)[^;]*)?(?:;|$)/i,
-    reason:
-      "DELETE FROM without a WHERE clause removes all rows. Add a WHERE clause or confirm full-table deletion is intended.",
-  },
-];
+function parseFrontmatter(content) {
+  const fmEnd = content.indexOf("\n---", 4);
+  if (!content.startsWith("---\n") || fmEnd === -1) return null;
+  try {
+    return parseYaml(content.slice(4, fmEnd));
+  } catch {
+    return null;
+  }
+}
 
 /**
- * Normalise a command string for pattern matching:
- * - collapse newlines and excess whitespace to single spaces
- * - keep the full string so piped/chained segments are still visible
+ * Load bash enforcement rules from all active rule artifacts.
+ * Uses the yaml library for proper frontmatter parsing.
  *
+ * @param {string} projectDir
+ * @returns {Array<{severity: "block"|"warn", id: string, pattern: RegExp, reason: string}>}
+ */
+function loadBashRulesFromArtifacts(projectDir) {
+  const rules = [];
+  const ruleDirs = [];
+
+  const devRules = join(projectDir, ".orqa", "process", "rules");
+  if (existsSync(devRules)) ruleDirs.push(devRules);
+
+  for (const parentDir of ["plugins", "connectors"]) {
+    const parent = join(projectDir, parentDir);
+    if (!existsSync(parent)) continue;
+    let entries;
+    try { entries = readdirSync(parent, { withFileTypes: true }); } catch { continue; }
+    for (const entry of entries) {
+      if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
+      const rulesDir = join(parent, entry.name, "rules");
+      if (existsSync(rulesDir)) ruleDirs.push(rulesDir);
+    }
+  }
+
+  for (const dir of ruleDirs) {
+    for (const file of readdirSync(dir)) {
+      if (!file.startsWith("RULE-") || !file.endsWith(".md")) continue;
+
+      let content;
+      try { content = readFileSync(join(dir, file), "utf-8"); } catch { continue; }
+
+      const fm = parseFrontmatter(content);
+      if (!fm) continue;
+      if (fm.status && fm.status !== "active") continue;
+      if (!Array.isArray(fm.enforcement)) continue;
+
+      const ruleId = fm.id || file.replace(".md", "");
+
+      for (const entry of fm.enforcement) {
+        if (typeof entry !== "object" || !entry) continue;
+        if (entry.event !== "bash") continue;
+        if (!entry.pattern) continue;
+
+        const action = entry.action || "warn";
+        const reason = entry.message || `Rule ${ruleId} violation`;
+
+        try {
+          rules.push({
+            severity: action === "block" ? "block" : "warn",
+            id: `${ruleId}:bash`,
+            pattern: new RegExp(entry.pattern, "i"),
+            reason,
+          });
+        } catch {
+          // Invalid regex in rule — skip
+        }
+      }
+    }
+  }
+
+  return rules;
+}
+
+/**
+ * Normalise a command string for pattern matching.
  * @param {string} command
  * @returns {string}
  */
@@ -172,15 +105,16 @@ function normaliseCommand(command) {
 
 /**
  * @param {string} command
- * @returns {{ blocked: SafetyRule[], warned: SafetyRule[] }}
+ * @param {Array} rules
+ * @returns {{ blocked: Array, warned: Array }}
  */
-function checkCommand(command) {
+function checkCommand(command, rules) {
   const normalised = normaliseCommand(command);
   const blocked = [];
   const warned = [];
   const seenIds = new Set();
 
-  for (const rule of SAFETY_RULES) {
+  for (const rule of rules) {
     if (seenIds.has(rule.id)) continue;
     if (!rule.pattern.test(normalised)) continue;
 
@@ -203,7 +137,6 @@ async function main() {
     input += chunk;
   }
 
-  /** @type {{ tool_name?: string, tool_input?: { command?: string }, cwd?: string }} */
   let hookInput;
   try {
     hookInput = JSON.parse(input);
@@ -215,44 +148,42 @@ async function main() {
   const command = (hookInput.tool_input || {}).command || "";
   const projectDir = hookInput.cwd || process.env.CLAUDE_PROJECT_DIR || ".";
 
-  // Only applies to Bash tool calls
   if (toolName !== "Bash") {
     process.exit(0);
   }
 
-  // Empty commands are safe
   if (!command.trim()) {
     process.exit(0);
   }
 
-  const { blocked, warned } = checkCommand(command);
+  // Load bash patterns from rule artifacts — no hardcoded patterns
+  const rules = loadBashRulesFromArtifacts(projectDir);
+  const { blocked, warned } = checkCommand(command, rules);
 
   if (blocked.length === 0 && warned.length === 0) {
-    logTelemetry("bash-safety", "PostToolUse", startTime, "allowed", {
+    logTelemetry("bash-safety", "PreToolUse", startTime, "allowed", {
       command_checked: command.slice(0, 120),
       patterns_matched: 0,
+      rules_loaded: rules.length,
       action: "allow",
     }, projectDir);
     process.exit(0);
   }
 
   if (blocked.length > 0) {
-    logTelemetry("bash-safety", "PostToolUse", startTime, "blocked", {
+    logTelemetry("bash-safety", "PreToolUse", startTime, "blocked", {
       command_checked: command.slice(0, 120),
       patterns_matched: blocked.length + warned.length,
+      rules_loaded: rules.length,
       action: "block",
       blocked_rules: blocked.map((r) => r.id),
       warned_rules: warned.map((r) => r.id),
     }, projectDir);
 
-    // Build a combined message for all violations
     const lines = ["BASH SAFETY — command blocked:"];
-
     for (const rule of blocked) {
       lines.push(`  [${rule.id}] ${rule.reason}`);
     }
-
-    // Include warn-level hits in the blocked output for context
     if (warned.length > 0) {
       lines.push("Additional warnings:");
       for (const rule of warned) {
@@ -262,19 +193,18 @@ async function main() {
 
     process.stderr.write(
       JSON.stringify({
-        hookSpecificOutput: {
-          permissionDecision: "deny",
-        },
+        hookSpecificOutput: { permissionDecision: "deny" },
         systemMessage: lines.join("\n"),
       })
     );
     process.exit(2);
   }
 
-  // Warn-only path: allow the command but surface the warnings
-  logTelemetry("bash-safety", "PostToolUse", startTime, "warned", {
+  // Warn-only path
+  logTelemetry("bash-safety", "PreToolUse", startTime, "warned", {
     command_checked: command.slice(0, 120),
     patterns_matched: warned.length,
+    rules_loaded: rules.length,
     action: "warn",
     warned_rules: warned.map((r) => r.id),
   }, projectDir);
@@ -285,9 +215,7 @@ async function main() {
   }
 
   process.stdout.write(
-    JSON.stringify({
-      systemMessage: lines.join("\n"),
-    })
+    JSON.stringify({ systemMessage: lines.join("\n") })
   );
   process.exit(0);
 }

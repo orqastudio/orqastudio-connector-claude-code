@@ -7,99 +7,18 @@
 
 import { readFileSync, readdirSync, existsSync, writeFileSync, mkdirSync } from "fs";
 import { join } from "path";
+import { parse as parseYaml } from "yaml";
 import { logTelemetry } from "./telemetry.mjs";
 
-// Unescape YAML double-quoted string escapes
-function yamlUnescape(str) {
-  return str.replace(/\\\\/g, "\\").replace(/\\n/g, "\n").replace(/\\t/g, "\t").replace(/\\"/g, '"');
-}
-
-// Simple YAML frontmatter parser (no external deps)
+// Parse YAML frontmatter from a markdown file using the yaml library.
 function parseFrontmatter(content) {
-  const match = content.match(/^---\n([\s\S]*?)\n---/);
-  if (!match) return null;
-  const yaml = match[1];
-  const result = {};
-
-  // Parse simple key: value pairs
-  let currentKey = null;
-  let currentObj = null;
-  let inArray = false;
-  let inObjArray = false;
-
-  for (const line of yaml.split("\n")) {
-    // Top-level key with simple value
-    const simpleMatch = line.match(/^(\w[\w-]*)\s*:\s*(.+)$/);
-    if (simpleMatch && !inObjArray) {
-      currentKey = simpleMatch[1];
-      let val = simpleMatch[2].trim();
-      // Handle quoted strings
-      if (val.startsWith('"') && val.endsWith('"')) val = yamlUnescape(val.slice(1, -1));
-      // Handle inline arrays [a, b]
-      if (val.startsWith("[") && val.endsWith("]")) {
-        val = val
-          .slice(1, -1)
-          .split(",")
-          .map((s) => s.trim().replace(/^"|"$/g, ""));
-      }
-      result[currentKey] = val;
-      inArray = false;
-      inObjArray = false;
-      continue;
-    }
-
-    // Top-level key with no value (start of array or object)
-    const keyOnly = line.match(/^(\w[\w-]*)\s*:\s*$/);
-    if (keyOnly) {
-      currentKey = keyOnly[1];
-      result[currentKey] = [];
-      inArray = true;
-      inObjArray = false;
-      continue;
-    }
-
-    // Array item (start of object) — check BEFORE simple string
-    if (inArray && line.match(/^  -\s+\w+\s*:/)) {
-      inObjArray = true;
-      currentObj = {};
-      const objMatch = line.match(/^  -\s+(\w+)\s*:\s*(.*)$/);
-      if (objMatch) {
-        let val = objMatch[2].trim();
-        if (val.startsWith('"') && val.endsWith('"')) val = yamlUnescape(val.slice(1, -1));
-        currentObj[objMatch[1]] = val;
-      }
-      if (!Array.isArray(result[currentKey])) result[currentKey] = [];
-      result[currentKey].push(currentObj);
-      continue;
-    }
-
-    // Array item (simple string) — after object check
-    if (inArray && !inObjArray && line.match(/^  -\s/)) {
-      const val = line.replace(/^  -\s+/, "").trim();
-      if (!Array.isArray(result[currentKey])) result[currentKey] = [];
-      result[currentKey].push(val);
-      continue;
-    }
-
-    // Object property within array item
-    if (inObjArray && currentObj && line.match(/^    \w+:/)) {
-      const propMatch = line.match(/^    (\w+)\s*:\s*(.*)$/);
-      if (propMatch) {
-        let val = propMatch[2].trim();
-        if (val.startsWith('"') && val.endsWith('"')) val = yamlUnescape(val.slice(1, -1));
-        // Handle inline arrays
-        if (val.startsWith("[") && val.endsWith("]")) {
-          val = val
-            .slice(1, -1)
-            .split(",")
-            .map((s) => s.trim().replace(/^"|"$/g, ""));
-        }
-        currentObj[propMatch[1]] = val;
-      }
-    }
+  const fmEnd = content.indexOf("\n---", 4);
+  if (!content.startsWith("---\n") || fmEnd === -1) return null;
+  try {
+    return parseYaml(content.slice(4, fmEnd));
+  } catch {
+    return null;
   }
-
-  return result;
 }
 
 // Check if a file path matches a glob pattern
@@ -334,19 +253,25 @@ function isDogfoodMode(projectDir) {
   return _dogfoodCache;
 }
 
-// Check dogfood plugin safety: block edits to first-party plugins when dogfood is active
-function checkDogfoodPluginSafety(projectDir, toolName, toolInput) {
-  if (!["Write", "Edit"].includes(toolName)) return null;
+// Check dogfood-conditional enforcement rules.
+// Rules with condition: "dogfood: true" are only evaluated when dogfood mode is active.
+// This replaces the old hardcoded checkDogfoodPluginSafety function.
+function checkDogfoodRules(projectDir, toolName, toolInput, rules) {
   if (!isDogfoodMode(projectDir)) return null;
+  if (!["Write", "Edit"].includes(toolName)) return null;
 
   const filePath = (toolInput.file_path || "").replace(/\\/g, "/");
-  // Match paths starting with plugins/ (absolute or relative)
-  if (/(?:^|\/)plugins\/[^/]/.test(filePath)) {
-    return {
-      decision: "block",
-      reason:
-        "Dogfood safety: Production agents cannot edit first-party plugins while dogfood mode is active. Plugin changes should go through a dedicated plugin-dev workflow or a non-dogfood session.",
-    };
+
+  for (const rule of rules) {
+    if (rule.condition !== "dogfood: true") continue;
+    if (rule.event !== "file") continue;
+
+    if (rule.pattern && filePath.includes(rule.pattern)) {
+      return {
+        decision: rule.action || "block",
+        reason: rule.message || `[${rule.ruleId}] Dogfood safety: blocked by conditional enforcement`,
+      };
+    }
   }
   return null;
 }
@@ -377,8 +302,11 @@ async function main() {
     process.exit(0);
   }
 
-  // Dogfood plugin safety check (runs before rule evaluation)
-  const dogfoodBlock = checkDogfoodPluginSafety(projectDir, toolName, toolInput);
+  // Load rules first so dogfood checks can use them
+  const rules = loadEnforcementRules(projectDir);
+
+  // Dogfood-conditional rules (evaluated before general rules)
+  const dogfoodBlock = checkDogfoodRules(projectDir, toolName, toolInput, rules);
   if (dogfoodBlock) {
     logTelemetry("rule-engine", "PreToolUse", startTime, "blocked", {
       violations_found: 1,
@@ -400,7 +328,6 @@ async function main() {
     process.exit(2);
   }
 
-  const rules = loadEnforcementRules(projectDir);
   const violations = evaluate(rules, toolName, toolInput);
 
   if (violations.length === 0) {

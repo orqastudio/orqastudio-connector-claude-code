@@ -16,6 +16,7 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { parse as parseYaml } from "yaml";
 
 export interface RuleEnforcementEntry {
 	event: "file" | "bash";
@@ -70,23 +71,33 @@ export class RuleEngine {
 			const filePath = path.join(rulesDir, entry);
 			const content = fs.readFileSync(filePath, "utf-8");
 
-			const fmMatch = content.match(/^---\n([\s\S]*?)\n---/);
-			if (!fmMatch) continue;
+			if (!content.startsWith("---\n")) continue;
+			const fmEnd = content.indexOf("\n---", 4);
+			if (fmEnd === -1) continue;
 
-			const frontmatter = fmMatch[1];
-			const idMatch = frontmatter.match(/^id:\s*(.+)/m);
-			const nameMatch = frontmatter.match(/^name:\s*(.+)/m);
+			let fm: Record<string, unknown>;
+			try {
+				fm = parseYaml(content.slice(4, fmEnd)) as Record<string, unknown>;
+			} catch {
+				continue;
+			}
 
-			if (!idMatch) continue;
+			if (!fm || typeof fm !== "object" || !fm.id) continue;
 
-			// Parse enforcement array from YAML
-			const enforcement = this.parseEnforcement(frontmatter);
+			const enforcement = Array.isArray(fm.enforcement) ? fm.enforcement : [];
 			if (enforcement.length === 0) continue;
 
 			this.rules.push({
-				id: idMatch[1].trim(),
-				name: nameMatch?.[1]?.trim() ?? idMatch[1].trim(),
-				enforcement,
+				id: String(fm.id),
+				name: String(fm.name ?? fm.title ?? fm.id),
+				enforcement: enforcement.map((e: Record<string, unknown>) => ({
+					event: String(e.event ?? ""),
+					action: String(e.action ?? "warn"),
+					pattern: String(e.pattern ?? ""),
+					paths: Array.isArray(e.paths) ? e.paths.map(String) : null,
+					message: String(e.message ?? ""),
+					skills: Array.isArray(e.skills) ? e.skills.map(String) : null,
+				})),
 				filePath,
 			});
 		}
@@ -170,69 +181,6 @@ export class RuleEngine {
 	// -----------------------------------------------------------------------
 	// Private helpers
 	// -----------------------------------------------------------------------
-
-	private parseEnforcement(yaml: string): RuleEnforcementEntry[] {
-		const entries: RuleEnforcementEntry[] = [];
-
-		// Find the enforcement: block in YAML
-		const enfMatch = yaml.match(/^enforcement:\s*\n((?:\s+-[\s\S]*?)(?=\n[a-z]|\n---|$))/m);
-		if (!enfMatch) return entries;
-
-		// Split into individual entries (each starts with "  - ")
-		const entryBlocks = enfMatch[1].split(/\n\s+-\s+/).filter(Boolean);
-
-		for (const block of entryBlocks) {
-			const lines = block.replace(/^\s+-\s+/, "").split("\n");
-			const entry: Partial<RuleEnforcementEntry> = {};
-
-			for (const line of lines) {
-				const kvMatch = line.match(/^\s*(\w+):\s*(.+)/);
-				if (!kvMatch) continue;
-
-				const [, key, value] = kvMatch;
-				switch (key) {
-					case "event":
-						entry.event = value.trim() as "file" | "bash";
-						break;
-					case "action":
-						entry.action = value.trim() as "block" | "warn" | "inject";
-						break;
-					case "pattern":
-						entry.pattern = value.trim().replace(/^["']|["']$/g, "");
-						break;
-					case "message":
-						entry.message = value.trim().replace(/^["']|["']$/g, "");
-						break;
-				}
-
-				// Handle paths as inline array
-				if (key === "paths") {
-					const pathsMatch = value.match(/\[(.+)\]/);
-					if (pathsMatch) {
-						entry.paths = pathsMatch[1].split(",").map((p) =>
-							p.trim().replace(/^["']|["']$/g, ""),
-						);
-					}
-				}
-
-				// Handle skills as inline array
-				if (key === "skills") {
-					const skillsMatch = value.match(/\[(.+)\]/);
-					if (skillsMatch) {
-						entry.skills = skillsMatch[1].split(",").map((s) =>
-							s.trim().replace(/^["']|["']$/g, ""),
-						);
-					}
-				}
-			}
-
-			if (entry.event && entry.action) {
-				entries.push(entry as RuleEnforcementEntry);
-			}
-		}
-
-		return entries;
-	}
 
 	private matchGlob(filePath: string, glob: string): boolean {
 		// Simple glob matching: * matches any chars, ** matches any path segments

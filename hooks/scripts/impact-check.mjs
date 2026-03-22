@@ -11,6 +11,7 @@
 import { existsSync, readFileSync } from "fs";
 import { join, relative } from "path";
 import { spawnSync } from "node:child_process";
+import { parse as parseYaml } from "yaml";
 import { logTelemetry } from "./telemetry.mjs";
 import { buildTypeRegistry, inferType, isGovernanceArtifact, isHighInfluence } from "./schema-registry.mjs";
 
@@ -100,22 +101,25 @@ function callMcpTool(projectPath, toolName, toolArgs) {
 // isOrqaArtifact and inferTypeFromPath replaced by schema-registry.mjs
 
 /**
- * Extract a scalar frontmatter field value from file content.
+ * Parse YAML frontmatter from file content and return a scalar field value.
  *
  * @param {string} content
  * @param {string} field
  * @returns {string | null}
  */
 function readFrontmatterField(content, field) {
-  if (!content.startsWith("---\n")) return null;
-  const endIdx = content.indexOf("\n---", 4);
-  if (endIdx === -1) return null;
-  const fmText = content.slice(4, endIdx);
-  for (const line of fmText.split("\n")) {
-    const match = line.match(new RegExp(`^${field}:\\s*(.+)$`));
-    if (match) return match[1].trim().replace(/^"|"$/g, "");
+  const fmEnd = content.indexOf("\n---", 4);
+  if (!content.startsWith("---\n") || fmEnd === -1) return null;
+  let fm;
+  try {
+    fm = parseYaml(content.slice(4, fmEnd));
+  } catch {
+    return null;
   }
-  return null;
+  if (!fm || typeof fm !== "object") return null;
+  const val = fm[field];
+  if (val === undefined || val === null) return null;
+  return String(val);
 }
 
 /**
@@ -261,7 +265,7 @@ async function main() {
   } else if (relResult === null) {
     lines.push(
       "MCP server unavailable — downstream impact count unknown. " +
-        "Run `orqa validate` to check graph integrity after this change."
+        "Run `orqa enforce` to check graph integrity after this change."
     );
   }
 

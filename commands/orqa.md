@@ -78,13 +78,13 @@ When creating artifacts:
 - Use proper YAML frontmatter with `id`, `type`, `status`, `relationships`
 - Always add bidirectional relationships (forward AND inverse)
 - Use `grounded-by` to connect to pillars, not `informs`
-- Run `orqa validate` before committing
+- Run `orqa enforce` before committing
 
 ## Quick actions
 
 ```bash
 # Validate integrity
-orqa validate
+orqa enforce
 
 # List installed plugins
 orqa plugin list

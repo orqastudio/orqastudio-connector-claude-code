@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // PostToolUse hook: validates .orqa/ artifacts after Write/Edit operations.
 //
-// Delegates to `orqa validate <file> --json` for schema-driven integrity checks.
+// Delegates to `orqa enforce <file> --json` for schema-driven integrity checks.
 // Non-blocking — reports validation issues as systemMessage warnings without
 // denying the operation.
 
@@ -17,7 +17,7 @@ import { buildTypeRegistry, isGovernanceArtifact } from "./schema-registry.mjs";
 // isOrqaArtifact replaced by schema-registry.mjs
 
 /**
- * Run `orqa validate <filePath> --json` and return the parsed result.
+ * Run `orqa enforce <filePath> --json` and return the parsed result.
  * Returns null if the CLI is unavailable or output is unparseable.
  *
  * @param {string} filePath  Absolute path to the artifact file
@@ -85,7 +85,7 @@ async function main() {
   const relPath = relative(projectDir, filePath).replace(/\\/g, "/");
 
   // ---------------------------------------------------------------------------
-  // Delegate to `orqa validate`
+  // Delegate to `orqa enforce`
   // ---------------------------------------------------------------------------
 
   const validation = runOrqaValidate(filePath, projectDir);
@@ -138,7 +138,7 @@ async function main() {
   }
 
   lines.push("");
-  lines.push("Fix errors before committing. Run `orqa validate --fix` for auto-remediation.");
+  lines.push("Fix errors before committing. Run `orqa enforce --fix` for auto-remediation.");
 
   process.stdout.write(JSON.stringify({ systemMessage: lines.join("\n") }));
   process.exit(0);

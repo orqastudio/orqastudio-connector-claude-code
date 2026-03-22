@@ -10,6 +10,7 @@
 
 import { existsSync, readFileSync, readdirSync } from "fs";
 import { join, relative } from "path";
+import { parse as parseYaml } from "yaml";
 import { logTelemetry } from "./telemetry.mjs";
 import { buildTypeRegistry, inferType, isGovernanceArtifact } from "./schema-registry.mjs";
 
@@ -65,49 +66,50 @@ function buildTypeRequirements(projectDir) {
 // isOrqaArtifact and inferTypeFromPath replaced by schema-registry.mjs
 
 /**
- * Extract YAML frontmatter text from markdown content.
+ * Parse YAML frontmatter from markdown content.
  *
  * @param {string} content
- * @returns {string | null}
+ * @returns {Record<string, unknown> | null}
  */
-function extractFrontmatterText(content) {
-  if (!content.startsWith("---\n")) return null;
-  const endIdx = content.indexOf("\n---", 4);
-  if (endIdx === -1) return null;
-  return content.slice(4, endIdx);
+function parseFrontmatter(content) {
+  const fmEnd = content.indexOf("\n---", 4);
+  if (!content.startsWith("---\n") || fmEnd === -1) return null;
+  try {
+    return parseYaml(content.slice(4, fmEnd));
+  } catch {
+    return null;
+  }
 }
 
 /**
  * Extract a scalar frontmatter field value.
  *
- * @param {string} fmText
+ * @param {Record<string, unknown>} fm
  * @param {string} field
  * @returns {string | null}
  */
-function getFrontmatterField(fmText, field) {
-  const lines = fmText.split("\n");
-  for (const line of lines) {
-    const match = line.match(new RegExp(`^${field}:\\s*(.+)$`));
-    if (match) {
-      return match[1].trim().replace(/^"|"$/g, "");
-    }
-  }
-  return null;
+function getFrontmatterField(fm, field) {
+  const val = fm[field];
+  if (val === undefined || val === null) return null;
+  return String(val);
 }
 
 /**
- * Extract all relationship type keys from frontmatter.
+ * Extract all relationship type keys from a parsed frontmatter object.
+ * Relationships are expected under a top-level key whose value is an array
+ * of objects with a `type` property.
  *
- * @param {string} fmText
+ * @param {Record<string, unknown>} fm
  * @returns {string[]}
  */
-function extractRelationshipTypes(fmText) {
+function extractRelationshipTypes(fm) {
   const types = [];
-  const lines = fmText.split("\n");
-  for (const line of lines) {
-    const match = line.match(/^\s+type:\s*(.+)$/);
-    if (match) {
-      types.push(match[1].trim().replace(/^"|"$/g, ""));
+  for (const val of Object.values(fm)) {
+    if (!Array.isArray(val)) continue;
+    for (const item of val) {
+      if (item && typeof item === "object" && "type" in item) {
+        types.push(String(item.type));
+      }
     }
   }
   return types;
@@ -163,15 +165,15 @@ async function main() {
     process.exit(0);
   }
 
-  const fmText = extractFrontmatterText(content);
-  if (!fmText) {
+  const fm = parseFrontmatter(content);
+  if (!fm) {
     process.exit(0);
   }
 
   // Determine artifact type from schema registry.
   const relPath = relative(projectDir, filePath).replace(/\\/g, "/");
-  const frontmatterType = getFrontmatterField(fmText, "type");
-  const frontmatterId = getFrontmatterField(fmText, "id");
+  const frontmatterType = getFrontmatterField(fm, "type");
+  const frontmatterId = getFrontmatterField(fm, "id");
   const artifactType = inferType(registry, relPath, frontmatterId, frontmatterType);
 
   if (!artifactType) {
@@ -185,7 +187,7 @@ async function main() {
   }
 
   // Check which required relationships are present.
-  const presentTypes = new Set(extractRelationshipTypes(fmText));
+  const presentTypes = new Set(extractRelationshipTypes(fm));
   const missing = requirements.filter((req) => !presentTypes.has(req.key));
 
   logTelemetry(
@@ -216,7 +218,7 @@ async function main() {
   lines.push("");
   lines.push(
     "Add these relationships before committing. " +
-      "Run `orqa validate` to check the full graph after writing."
+      "Run `orqa enforce` to check the full graph after writing."
   );
 
   process.stdout.write(JSON.stringify({ systemMessage: lines.join("\n") }));

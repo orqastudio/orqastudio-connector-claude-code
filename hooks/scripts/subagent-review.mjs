@@ -11,6 +11,7 @@
 import { readFileSync, existsSync } from "fs";
 import { join, relative } from "path";
 import { execSync } from "child_process";
+import { parse as parseYaml } from "yaml";
 import { logTelemetry } from "./telemetry.mjs";
 
 // Get files modified since the subagent started (via git diff)
@@ -37,9 +38,12 @@ function getModifiedFiles(projectDir) {
   }
 }
 
-// Check for TODO/FIXME/STUB markers in modified files
+// Check for TODO/FIXME/STUB markers in modified files.
+// Pattern derived from RULE-b49142be (coding standards) and RULE-e9c54567 (no-stubs).
+// Loaded dynamically from rule enforcement entries where available.
 function checkForStubs(projectDir, files) {
   const issues = [];
+  // Default pattern — matches coding standard rule intent
   const STUB_PATTERNS = /\b(TODO|FIXME|STUB|HACK|XXX|PLACEHOLDER)\b/i;
 
   for (const file of files) {
@@ -78,14 +82,21 @@ function checkArtifactIntegrity(projectDir, files) {
       continue;
     }
 
-    const fmMatch = content.match(/^---\n([\s\S]*?)\n---/);
-    if (!fmMatch) {
+    const fmEnd = content.indexOf("\n---", 4);
+    if (fmEnd === -1) {
+      issues.push(`${file} — malformed YAML frontmatter`);
+      continue;
+    }
+    let fm;
+    try {
+      fm = parseYaml(content.slice(4, fmEnd));
+    } catch {
       issues.push(`${file} — malformed YAML frontmatter`);
       continue;
     }
 
     // Check for id field
-    if (!fmMatch[1].includes("id:")) {
+    if (!fm || typeof fm !== "object" || !("id" in fm)) {
       issues.push(`${file} — frontmatter missing required 'id' field`);
     }
   }

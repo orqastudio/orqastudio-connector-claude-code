@@ -139,4 +139,4 @@ After creating artifacts:
 1. Check frontmatter against `schema.json` in the target directory
 2. Verify all relationship targets exist
 3. Verify all inverses are present on target artifacts
-4. Run `orqa validate` to check graph integrity
+4. Run `orqa enforce` to check graph integrity

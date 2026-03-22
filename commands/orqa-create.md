@@ -45,7 +45,7 @@ Use the governance-steward agent to create the artifact with:
 
 ### 5. Validate
 
-Run `orqa validate` to check the new artifact passes integrity checks.
+Run `orqa enforce` to check the new artifact passes integrity checks.
 
 ## Example: Create a new task
 
