@@ -8,27 +8,13 @@
 import { relative } from "path";
 import { spawnSync } from "node:child_process";
 import { logTelemetry } from "./telemetry.mjs";
+import { buildTypeRegistry, isGovernanceArtifact } from "./schema-registry.mjs";
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-/**
- * Check if a file path is a governance artifact (.orqa/, plugin, or connector).
- *
- * @param {string} filePath
- * @param {string} projectDir
- * @returns {boolean}
- */
-function isOrqaArtifact(filePath, projectDir) {
-  if (!filePath.endsWith(".md")) return false;
-  const rel = relative(projectDir, filePath).replace(/\\/g, "/");
-  return (
-    rel.startsWith(".orqa/") ||
-    /^plugins\/[^/]+\/(agents|rules|knowledge|documentation)\//.test(rel) ||
-    /^connectors\/[^/]+\/knowledge\//.test(rel)
-  );
-}
+// isOrqaArtifact replaced by schema-registry.mjs
 
 /**
  * Run `orqa validate <filePath> --json` and return the parsed result.
@@ -91,7 +77,8 @@ async function main() {
   }
 
   const filePath = toolInput.file_path || "";
-  if (!isOrqaArtifact(filePath, projectDir)) {
+  const registry = buildTypeRegistry(projectDir);
+  if (!isGovernanceArtifact(filePath, projectDir, registry)) {
     process.exit(0);
   }
 

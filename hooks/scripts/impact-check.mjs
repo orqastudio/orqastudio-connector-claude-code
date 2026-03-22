@@ -12,13 +12,13 @@ import { existsSync, readFileSync } from "fs";
 import { join, relative } from "path";
 import { spawnSync } from "node:child_process";
 import { logTelemetry } from "./telemetry.mjs";
+import { buildTypeRegistry, inferType, isGovernanceArtifact, isHighInfluence } from "./schema-registry.mjs";
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
-/** Artifact types that always trigger impact injection. */
-const HIGH_INFLUENCE_TYPES = new Set(["pillar", "vision", "decision", "rule"]);
+// HIGH_INFLUENCE_TYPES removed — use isHighInfluence from schema-registry.mjs
 
 /** Threshold: inject impact context if downstream count exceeds this. */
 const DOWNSTREAM_THRESHOLD = 20;
@@ -97,43 +97,7 @@ function callMcpTool(projectPath, toolName, toolArgs) {
 // Helpers
 // ---------------------------------------------------------------------------
 
-/**
- * Check if a file path is a governance artifact (.orqa/, plugin, or connector).
- *
- * @param {string} filePath
- * @param {string} projectDir
- * @returns {boolean}
- */
-function isOrqaArtifact(filePath, projectDir) {
-  if (!filePath.endsWith(".md")) return false;
-  const rel = relative(projectDir, filePath).replace(/\\/g, "/");
-  return (
-    rel.startsWith(".orqa/") ||
-    /^plugins\/[^/]+\/(agents|rules|knowledge|documentation)\//.test(rel) ||
-    /^connectors\/[^/]+\/knowledge\//.test(rel)
-  );
-}
-
-/**
- * Infer artifact type from a relative path (same heuristic as Rust graph builder).
- *
- * @param {string} relPath
- * @returns {string | null}
- */
-function inferTypeFromPath(relPath) {
-  const norm = relPath.replace(/\\/g, "/");
-  if (norm.includes("/pillars/")) return "pillar";
-  if (norm.includes("/vision/")) return "vision";
-  if (norm.includes("/decisions/")) return "decision";
-  if (norm.includes("/rules/")) return "rule";
-  if (norm.includes("/epics/")) return "epic";
-  if (norm.includes("/tasks/")) return "task";
-  if (norm.includes("/milestones/")) return "milestone";
-  if (norm.includes("/ideas/")) return "idea";
-  if (norm.includes("/agents/")) return "agent";
-  if (norm.includes("/knowledge/")) return "knowledge";
-  return null;
-}
+// isOrqaArtifact and inferTypeFromPath replaced by schema-registry.mjs
 
 /**
  * Extract a scalar frontmatter field value from file content.
@@ -218,7 +182,8 @@ async function main() {
   }
 
   const filePath = toolInput.file_path || "";
-  if (!isOrqaArtifact(filePath, projectDir)) {
+  const registry = buildTypeRegistry(projectDir);
+  if (!isGovernanceArtifact(filePath, projectDir, registry)) {
     process.exit(0);
   }
 
@@ -238,14 +203,14 @@ async function main() {
 
   const artifactId = readFrontmatterField(fileContent, "id");
   const frontmatterType = readFrontmatterField(fileContent, "type");
-  const artifactType = frontmatterType || inferTypeFromPath(relPath);
+  const artifactType = inferType(registry, relPath, artifactId, frontmatterType);
 
   if (!artifactId) {
     process.exit(0);
   }
 
-  const isHighInfluence = artifactType
-    ? HIGH_INFLUENCE_TYPES.has(artifactType)
+  const highInfluence = artifactType
+    ? isHighInfluence(registry, artifactType)
     : false;
 
   // Query the MCP server for relationship data.
@@ -255,7 +220,7 @@ async function main() {
   });
 
   const downstreamCount = countIncoming(relResult);
-  const shouldInject = isHighInfluence || downstreamCount > DOWNSTREAM_THRESHOLD;
+  const shouldInject = highInfluence || downstreamCount > DOWNSTREAM_THRESHOLD;
 
   logTelemetry(
     "impact-check",
@@ -266,7 +231,7 @@ async function main() {
       file: relPath,
       artifact_id: artifactId,
       artifact_type: artifactType,
-      is_high_influence: isHighInfluence,
+      is_high_influence: highInfluence,
       downstream_count: downstreamCount,
       mcp_available: relResult !== null,
     },
@@ -279,7 +244,7 @@ async function main() {
 
   const lines = [`IMPACT CONTEXT — ${artifactId} (${artifactType || "unknown type"}):`];
 
-  if (isHighInfluence) {
+  if (highInfluence) {
     lines.push(
       `This is a ${artifactType} artifact. Changes affect the entire governance framework.`
     );

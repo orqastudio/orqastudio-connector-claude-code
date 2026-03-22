@@ -11,6 +11,7 @@
 import { existsSync, readFileSync, readdirSync } from "fs";
 import { join, relative } from "path";
 import { logTelemetry } from "./telemetry.mjs";
+import { buildTypeRegistry, inferType, isGovernanceArtifact } from "./schema-registry.mjs";
 
 // ---------------------------------------------------------------------------
 // Type → required relationship rules
@@ -61,22 +62,7 @@ function buildTypeRequirements(projectDir) {
 // Helpers
 // ---------------------------------------------------------------------------
 
-/**
- * Check if a file path is a governance artifact (.orqa/, plugin, or connector).
- *
- * @param {string} filePath
- * @param {string} projectDir
- * @returns {boolean}
- */
-function isOrqaArtifact(filePath, projectDir) {
-  if (!filePath.endsWith(".md")) return false;
-  const rel = relative(projectDir, filePath).replace(/\\/g, "/");
-  return (
-    rel.startsWith(".orqa/") ||
-    /^plugins\/[^/]+\/(agents|rules|knowledge|documentation)\//.test(rel) ||
-    /^connectors\/[^/]+\/knowledge\//.test(rel)
-  );
-}
+// isOrqaArtifact and inferTypeFromPath replaced by schema-registry.mjs
 
 /**
  * Extract YAML frontmatter text from markdown content.
@@ -127,26 +113,7 @@ function extractRelationshipTypes(fmText) {
   return types;
 }
 
-/**
- * Infer artifact type from the file path using the same heuristic as the
- * Rust graph builder.
- *
- * @param {string} relPath  Relative path from project root
- * @returns {string | null}
- */
-function inferTypeFromPath(relPath) {
-  const norm = relPath.replace(/\\/g, "/");
-  if (norm.includes("/tasks/")) return "task";
-  if (norm.includes("/epics/")) return "epic";
-  if (norm.includes("/milestones/")) return "milestone";
-  if (norm.includes("/ideas/")) return "idea";
-  if (norm.includes("/decisions/")) return "decision";
-  if (norm.includes("/rules/")) return "rule";
-  if (norm.includes("/agents/")) return "agent";
-  if (norm.includes("/knowledge/")) return "knowledge";
-  if (norm.includes("/pillars/")) return "pillar";
-  return null;
-}
+// inferTypeFromPath removed — use inferType from schema-registry.mjs
 
 // ---------------------------------------------------------------------------
 // Main
@@ -176,7 +143,8 @@ async function main() {
   }
 
   const filePath = toolInput.file_path || "";
-  if (!isOrqaArtifact(filePath, projectDir)) {
+  const registry = buildTypeRegistry(projectDir);
+  if (!isGovernanceArtifact(filePath, projectDir, registry)) {
     process.exit(0);
   }
 
@@ -200,10 +168,11 @@ async function main() {
     process.exit(0);
   }
 
-  // Determine artifact type: frontmatter `type:` field takes priority, then path inference.
+  // Determine artifact type from schema registry.
   const relPath = relative(projectDir, filePath).replace(/\\/g, "/");
   const frontmatterType = getFrontmatterField(fmText, "type");
-  const artifactType = frontmatterType || inferTypeFromPath(relPath);
+  const frontmatterId = getFrontmatterField(fmText, "id");
+  const artifactType = inferType(registry, relPath, frontmatterId, frontmatterType);
 
   if (!artifactType) {
     process.exit(0);
