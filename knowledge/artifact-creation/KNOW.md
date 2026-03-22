@@ -1,4 +1,5 @@
 ---
+id: KNOW-816ebef3
 name: artifact-creation
 description: "How to create valid OrqaStudio artifacts — frontmatter requirements, relationship rules, schema compliance, and common patterns."
 user-invocable: false

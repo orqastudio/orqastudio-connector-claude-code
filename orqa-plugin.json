@@ -3,7 +3,10 @@
   "version": "0.1.0-dev",
   "displayName": "Claude Code Connector",
   "description": "Bridges OrqaStudio governance with Claude Code — agent mapping, rule enforcement, skill injection, artifact validation, and slash commands.",
-  "requires": ["@orqastudio/plugin-agile-governance", "@orqastudio/plugin-systems-thinking"],
+  "requires": [
+    "@orqastudio/plugin-agile-governance",
+    "@orqastudio/plugin-systems-thinking"
+  ],
   "category": "connector",
   "provides": {
     "schemas": [],
@@ -13,7 +16,9 @@
     "lspServers": {
       "orqastudio": {
         "command": "orqa",
-        "args": ["lsp"],
+        "args": [
+          "lsp"
+        ],
         "extensionToLanguage": {
           ".md": "markdown"
         }
@@ -22,14 +27,51 @@
     "mcpServers": {
       "orqastudio": {
         "command": "orqa",
-        "args": ["mcp"]
+        "args": [
+          "mcp"
+        ]
       }
     },
     "knowledge": [
       {
-        "key": "plugin-setup",
-        "id": "KNOW-5ebf82dc",
-        "label": "OrqaStudio Plugin Setup"
+        "key": "artifact-creation",
+        "id": "KNOW-816ebef3",
+        "label": "Human-readable title"
+      },
+      {
+        "key": "artifact-ids",
+        "id": "KNOW-9573eeea",
+        "label": "artifact-ids"
+      },
+      {
+        "key": "decision-tree",
+        "id": "KNOW-3155cdaa",
+        "label": "Orchestrator decision tree — self-navigating knowledge discovery"
+      },
+      {
+        "key": "delegation-patterns",
+        "id": "KNOW-ac314f61",
+        "label": "delegation-patterns"
+      },
+      {
+        "key": "implementer-tree",
+        "id": "KNOW-b1593311",
+        "label": "Implementer decision tree — domain-aware implementation protocol"
+      },
+      {
+        "key": "0fd23e0b",
+        "id": "KNOW-0fd23e0b",
+        "label": "Project Migration"
+      },
+      {
+        "key": "82ceb1bd",
+        "id": "KNOW-82ceb1bd",
+        "label": "Project Inference"
+      },
+      {
+        "key": "reviewer-tree",
+        "id": "KNOW-08fcd847",
+        "label": "Reviewer decision tree — standards-driven review protocol"
       },
       {
         "key": "rule-enforcement",
@@ -37,29 +79,9 @@
         "label": "Rule Enforcement (CLI Plugin)"
       },
       {
-        "key": "delegation-patterns",
-        "id": "KNOW-CC-002",
-        "label": "Agent Delegation Patterns"
-      },
-      {
-        "key": "governance-context",
-        "id": "KNOW-CC-003",
-        "label": "Governance Context"
-      },
-      {
-        "key": "artifact-creation",
-        "id": "KNOW-CC-004",
-        "label": "Artifact Creation"
-      },
-      {
-        "key": "artifact-ids",
-        "id": "KNOW-CC-005",
-        "label": "Artifact ID Format & Generation"
-      },
-      {
         "key": "tool-mapping",
         "id": "KNOW-b0b55e54",
-        "label": "Tool Mapping for Governance Operations"
+        "label": "tool-mapping"
       }
     ],
     "hooks": [

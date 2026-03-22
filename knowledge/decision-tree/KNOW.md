@@ -1,6 +1,5 @@
 ---
 id: KNOW-3155cdaa
-type: knowledge
 title: Orchestrator decision tree — self-navigating knowledge discovery
 description: "Reasoning protocol injected on every prompt. Provides a thinking framework: classify context, understand what kind of work this is, form the right question, then search."
 status: active

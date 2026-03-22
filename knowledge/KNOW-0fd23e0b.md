@@ -1,6 +1,5 @@
 ---
 id: KNOW-0fd23e0b
-type: knowledge
 title: Project Migration
 description: |
   Reads existing agentic tool configurations (Claude Code, Cursor, Copilot, Aider)

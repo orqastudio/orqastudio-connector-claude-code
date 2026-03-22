@@ -1,6 +1,5 @@
 ---
 id: KNOW-b1593311
-type: knowledge
 title: Implementer decision tree — domain-aware implementation protocol
 description: "Reasoning protocol for Implementer agents. Provides a thinking framework: understand the domain context, ask the right question, discover patterns, then build."
 status: active

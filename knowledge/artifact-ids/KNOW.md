@@ -1,4 +1,5 @@
 ---
+id: KNOW-9573eeea
 name: artifact-ids
 description: "How artifact IDs work in OrqaStudio — TYPE-XXXXXXXX hex format, generation, validation. Injected when creating artifacts."
 user-invocable: false
