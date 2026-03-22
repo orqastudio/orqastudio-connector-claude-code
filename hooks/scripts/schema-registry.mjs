@@ -198,8 +198,5 @@ export function requiresField(registry, typeKey, field) {
 export function isHighInfluence(registry, typeKey) {
   const typeDef = registry.byKey.get(typeKey);
   if (!typeDef) return false;
-  if (typeDef.influence === "high") return true;
-  // Default high-influence types based on governance role
-  // These are the types that define the governance framework itself
-  return ["pillar", "vision", "decision", "rule"].includes(typeKey);
+  return typeDef.influence === "high";
 }
